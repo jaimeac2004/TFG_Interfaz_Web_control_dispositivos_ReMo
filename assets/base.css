@@ -1,0 +1,102 @@
+/* color palette from <https://github.com/vuejs/theme> */
+:root {
+  --vt-c-white: #ffffff;
+  --vt-c-white-soft: #f8f8f8;
+  --vt-c-white-mute: #f2f2f2;
+
+  --vt-c-black: #181818;
+  --vt-c-black-soft: #222222;
+  --vt-c-black-mute: #282828;
+
+  --vt-c-indigo: #2c3e50;
+
+  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
+  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
+  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
+  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+
+  --vt-c-text-light-1: var(--vt-c-indigo);
+  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
+  --vt-c-text-dark-1: var(--vt-c-white);
+  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+}
+
+/* ☀️ TEMA CLARO (Variables de Vue + TUS VARIABLES) */
+:root {
+  /* Por defecto de Vue */
+  --color-background: var(--vt-c-white);
+  --color-background-soft: var(--vt-c-white-soft);
+  --color-background-mute: var(--vt-c-white-mute);
+  --color-border: var(--vt-c-divider-light-2);
+  --color-border-hover: var(--vt-c-divider-light-1);
+  --color-heading: var(--vt-c-text-light-1);
+  --color-text: var(--vt-c-text-light-1);
+  --section-gap: 160px;
+
+  /* TUS VARIABLES PERSONALIZADAS */
+  --color-bg-main: #f9fafb;
+  --color-bg-white: var(--vt-c-white);
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-title: #1e3a8a;
+  
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-warning-text: #c2410c;
+  
+  --color-input-border: #d1d5db;
+  --color-input-focus: #3b82f6;
+
+  --transition-speed: 0.3s;
+}
+
+/* 🌙 TEMA OSCURO (Reemplazamos el @media por html.dark para control manual) */
+html.dark {
+  /* Por defecto de Vue */
+  --color-background: var(--vt-c-black);
+  --color-background-soft: var(--vt-c-black-soft);
+  --color-background-mute: var(--vt-c-black-mute);
+  --color-border: var(--vt-c-divider-dark-2);
+  --color-border-hover: var(--vt-c-divider-dark-1);
+  --color-heading: var(--vt-c-text-dark-1);
+  --color-text: var(--vt-c-text-dark-2);
+
+  /* TUS VARIABLES ADAPTADAS AL OSCURO (Aprovechando la paleta de Vue) */
+  --color-bg-main: var(--vt-c-black);
+  --color-bg-white: var(--vt-c-black-soft);
+  --color-text-primary: var(--vt-c-white);
+  --color-text-secondary: var(--vt-c-text-dark-2);
+  --color-text-title: #60a5fa; /* Azul más claro para que resalte en oscuro */
+  
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-danger: #ef4444;
+  --color-danger-hover: #f87171;
+  --color-warning-text: #fb923c;
+  
+  --color-input-border: var(--vt-c-divider-dark-1);
+}
+
+/* Estilos globales de Vue (Sin tocar) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-background);
+  transition: color 0.5s, background-color 0.5s;
+  line-height: 1.6;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
