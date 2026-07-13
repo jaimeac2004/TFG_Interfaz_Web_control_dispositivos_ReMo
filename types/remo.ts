@@ -1,7 +1,7 @@
 // Tipados de los JSON obtenidos del Backend para la deteccion de los sensores y el estado de los mismos, y tambien para los datos de Gestor.Nodos
 
-export type TipoSensor = "ATH" | "AD" | "TH";
-export type EstadoSaludSensor = "OK" | "Desconectado" | "Inactivo" | "Fuera de rango" | "Repitiendo";
+export type TipoSensor = "ATH" | "AD" | "TH" | "None";
+export type EstadoSaludSensor = "OK" | "Desconectado" | "Inactivo" | "Fuera de rango" | "Repitiendo" | "Ausente";
 
 // Sensores devueltos por GET /remo/Status/?Seccion=Generador&Key=Sensores
 export interface SensorDetectado {

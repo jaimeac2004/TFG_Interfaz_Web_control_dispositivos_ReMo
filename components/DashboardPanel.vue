@@ -17,6 +17,7 @@ const getStatusClass = (estado: string) => {
     case 'Inactivo': return 'status-error'
     case 'Fuera de rango': return 'status-warning'
     case 'Repitiendo': return 'status-info'
+    case 'Ausente': return 'status-default'
     default: return 'status-default'
   }
 }

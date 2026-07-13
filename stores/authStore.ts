@@ -85,11 +85,15 @@ export const useAuthStore = defineStore('auth', {
       try {
         // Lanzamos las peticiones en paralelo hacia el backend de LabVIEW
         //MUY IMPORTANTE: LA DOCUMENTACION DE HAY UNA ERRATA CON LA URL, PONE "GENERADOR" Y ES "GENERATOR"
-        const [resSensores, resEstados, resNodos] = await Promise.all([
+        /*const [resSensores, resEstados, resNodos] = await Promise.all([
           api.get<SensorDetectado[]>('/remo/Status/?Seccion=Generator&Key=Sensores', { withCredentials: true }),
           api.get<EstadoSensor[]>('/remo/Status/?Seccion=Generator&Key=Estado', { withCredentials: true }),
           api.get<any>('/remo/Config/?Seccion=Gestor.Nodos', { withCredentials: true })
-        ])
+        ])*/
+
+        //Version despues de annadir a Status la seccion Gestor.Nodos
+        const res = await api.get<any>('/remo/Status/?Seccion=Gestor&Key=Nodos', { withCredentials: true })
+        
 
         // const safeParse = (data: any) => {
         //   if (typeof data === 'string') {
@@ -104,31 +108,25 @@ export const useAuthStore = defineStore('auth', {
         //   return data || []
         // }
 
-        const sensoresDetectados = resSensores.data 
-        const estadosSensores = resEstados.data 
-        const nodos = resNodos.data
+        const nodos = res.data
 
         // Realizamos la fusión de los datos usando la posición
-        if (Array.isArray(sensoresDetectados) && sensoresDetectados.length > 0) {
-          this.sensoresUI = sensoresDetectados.map((sensor: any) => {
-            // Buscamos el estado asegurándonos también de que estadosSensores sea un array
-            let estadoMatch = null;
-            if (Array.isArray(estadosSensores)) {
-              estadoMatch = estadosSensores.find((e: any) => e.Posicion === sensor.Posicion)
-            }
-
-            let nodoMatch = null;
-            if (Array.isArray(nodos)) {
-              nodoMatch = nodos.find((n: any) => n.Sensor === sensor.Posicion)
-            }
-          
-            return {
-              ...sensor,
-              EstadoSalud: estadoMatch ? estadoMatch.Estado : 'Desconectado',
-              Nombre: nodoMatch ? nodoMatch.Nombre : `Sin Nombre`, // Del JSON 3
-              Coordenadas: nodoMatch ? nodoMatch.Posicion : { x: 0, y: 0, z: 0 } // Del JSON 3
-            }
-          })
+        if (Array.isArray(nodos) && nodos.length > 0) {
+          // 2. Filtramos y Mapeamos los datos
+          this.sensoresUI = nodos
+            // Filtro: Ocultamos los "Ausentes" para no llenar la tabla de filas vacías. 
+            // (Si quieres ver los 16 canales siempre, borra esta línea)
+            .filter((nodo: any) => nodo.Estado !== 'Ausente')
+            // Mapeo: Extraemos los datos del sub-objeto "Sensor" hacia la raíz para mantener compatibilidad
+            .map((nodo: any) => ({
+              Posicion: nodo.Sensor.Posicion,
+              Tipo: nodo.Sensor.Tipo,
+              Canales: nodo.Sensor.Canales,
+              Estados: nodo.Sensor.Estados,
+              Nombre: nodo.Nombre,
+              Coordenadas: nodo.Posicion, // Coordenadas 3D
+              EstadoSalud: nodo.Estado
+            }))
         } else {
           // Si LabVIEW devuelve vacío o algo que no reconocemos, dejamos el dashboard vacío
           this.sensoresUI = []
