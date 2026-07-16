@@ -27,6 +27,32 @@ export const useAuthStore = defineStore('auth', {
     errorDashboard: ''
   }),
 
+  getters: {
+    canalesDisponibles: (state): string[] => {
+      const canalesFisicos: string[] = [];
+      
+      state.sensoresUI.forEach(sensor => {
+        if (!sensor.Canales || sensor.Canales.length === 0) return;
+        
+        sensor.Canales.forEach(canal => {
+          if (canal === 'AD') {
+            // Si es AD, el nombre del canal es directamente el nombre del nodo
+            canalesFisicos.push(sensor.Nombre); 
+          } else if (canal.startsWith('Eje ')) {
+            // Si es ATH, extrae la letra (X, Y, Z) y la concatena con un punto
+            const eje = canal.split(' ')[1]; 
+            canalesFisicos.push(`${sensor.Nombre}.${eje}`); 
+          } else {
+            // Por seguridad ante futuros sensores
+            canalesFisicos.push(`${sensor.Nombre}.${canal}`); 
+          }
+        });
+      });
+      
+      return canalesFisicos;
+    }
+  },
+
   actions: {
     async login(username: string, password: string) {
       // const data = "username=" + encodeURIComponent(username) + "&password=" + encodeURIComponent(password);

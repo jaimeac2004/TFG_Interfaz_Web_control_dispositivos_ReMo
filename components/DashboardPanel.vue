@@ -21,6 +21,18 @@ const getStatusClass = (estado: string) => {
     default: return 'status-default'
   }
 }
+
+//Funcion para formar el nombre correcto de los canales
+const formatearNombreCanales = (sensor: any) => {
+  if (!sensor.Canales || sensor.Nombre === 'Sin Nombre') return sensor.Canales?.join(', ') || '';
+  
+  return sensor.Canales.map((canal: string) => {
+    if (canal === 'AD') return sensor.Nombre;
+    if (canal.startsWith('Eje ')) return `${sensor.Nombre}.${canal.split(' ')[1]}`;
+    return `${sensor.Nombre}.${canal}`;
+  }).join(', ');
+}
+
 </script>
 
 <template>
@@ -75,7 +87,7 @@ const getStatusClass = (estado: string) => {
                 <!-- Uso de Tooltips Nativos (Atributo 'title') para manejar arrays gigantes -->
                 <span v-if="sensor.Canales && sensor.Canales.length > 0" 
                       class="pill pill-channels" 
-                      :title="sensor.Canales.join(', ')">
+                      :title="formatearNombreCanales(sensor)">
                   {{ sensor.Canales.length }} Canales
                 </span>
                 

@@ -28,11 +28,12 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
-  // Esperar la verificación de la sesión si aún no se hizo
-  if (!auth.isAuthenticated && to.meta.requiresAuth) {
+  // Esperar la verificación de la sesión
+  if (to.meta.requiresAuth) {
     await auth.checkSession()
   }
 
+  //Si es necesaria la verificación de la sesión, se comprueba también que se haya completado con éxito
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login' }
   }
