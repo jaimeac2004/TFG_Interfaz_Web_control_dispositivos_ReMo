@@ -301,7 +301,7 @@ const handleEliminar = async (medida: MedidaItem) => {
 
           <!-- Selector de conjunto de Datos (Gestor.Datas) -->
           <div class="form-group mt-2">
-            <label class="form-label">Datos a Guardar (Gestor.Datas)</label>
+            <label class="form-label">Datos</label>
             <select v-model="formData.Data" class="form-select">
               <option value="*">Todos los canales (*)</option>
               <option v-for="grupo in measuresStore.listaDatas" :key="grupo" :value="grupo">
