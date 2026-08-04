@@ -4,6 +4,7 @@ import type { MedidaItem, ConfigMedidasResponse } from '@/types/measures'
 
 interface MeasuresState {
   listaMedidas: MedidaItem[]
+  listaDatas: string[]
   loading: boolean
   error: string
   successMsg: string
@@ -12,6 +13,7 @@ interface MeasuresState {
 export const useMeasuresStore = defineStore('measures', {
   state: (): MeasuresState => ({
     listaMedidas: [],
+    listaDatas: [],
     loading: false,
     error: '',
     successMsg: ''
@@ -25,13 +27,26 @@ export const useMeasuresStore = defineStore('measures', {
       this.successMsg = ''
 
       try {
-        const res = await api.get<any>('/remo/Config/?Seccion=Gestor.Medidas', { withCredentials: true })
 
-        // Si la estructura trae el nodo "Medidas" y es un array, lo guardamos
-        if (res.data && Array.isArray(res.data)) {
-          this.listaMedidas = res.data
+        // Hacemos las dos peticiones en paralelo a la configuración
+        const [resMedidas, resDatas] = await Promise.all([
+          api.get<any>('/remo/Config/?Seccion=Gestor.Medidas', { withCredentials: true }),
+          api.get<any>('/remo/Config/?Seccion=Gestor.Datas', { withCredentials: true })
+        ])
+
+        // 1. Guardar Medidas
+        if (resMedidas.data && Array.isArray(resMedidas.data)) {
+          this.listaMedidas = resMedidas.data
         } else {
           this.listaMedidas = []
+        }
+
+        // 2. Guardar nombres de Datas
+        // Mapeamos el array para quedarnos ÚNICAMENTE con la propiedad "Nombre" de cada conjunto
+        if (resDatas.data && Array.isArray(resDatas.data)) {
+          this.listaDatas = resDatas.data.map((item: any) => item.Nombre).filter(Boolean)
+        } else {
+          this.listaDatas = []
         }
 
       } catch (err) {

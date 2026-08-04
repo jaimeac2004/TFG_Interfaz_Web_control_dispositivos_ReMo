@@ -140,9 +140,6 @@ export const useAuthStore = defineStore('auth', {
         if (Array.isArray(nodos) && nodos.length > 0) {
           // 2. Filtramos y Mapeamos los datos
           this.sensoresUI = nodos
-            // Filtro: Ocultamos los "Ausentes" para no llenar la tabla de filas vacías. 
-            // (Si quieres ver los 16 canales siempre, borra esta línea)
-            .filter((nodo: any) => nodo.Estado !== 'Ausente')
             // Mapeo: Extraemos los datos del sub-objeto "Sensor" hacia la raíz para mantener compatibilidad
             .map((nodo: any) => ({
               Posicion: nodo.Sensor.Posicion,

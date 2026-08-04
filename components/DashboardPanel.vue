@@ -1,12 +1,29 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 
 const auth = useAuthStore()
+const router = useRouter()
+let pollInterval: any = null
 
 // El onMounted solo se ejecuta si v-if="auth.isAuthenticated" se cumple en el padre
 onMounted(() => {
   auth.fetchDashboardData()
+  
+  // Polling de 10 segundos
+  pollInterval = setInterval(async () => {
+    await auth.checkSession() // Verificamos si seguimos vivos
+    if (!auth.isAuthenticated) {
+      router.push('/') // Expulsamos al Inicio/Bienvenida
+      return
+    }
+    await auth.fetchDashboardData()
+  }, 10000)
+})
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
 })
 
 // Nos traemos la función de los colores que antes vivía en la tarjeta eliminada
@@ -17,7 +34,7 @@ const getStatusClass = (estado: string) => {
     case 'Inactivo': return 'status-error'
     case 'Fuera de rango': return 'status-warning'
     case 'Repitiendo': return 'status-info'
-    case 'Ausente': return 'status-default'
+    case 'Ausente': return 'status-error'
     default: return 'status-default'
   }
 }
@@ -79,7 +96,7 @@ const formatearNombreCanales = (sensor: any) => {
             </td>
             
             <td>
-              <span class="sensor-type">{{ sensor.Tipo }}</span>
+              <span class="sensor-type">{{ sensor.EstadoSalud === 'Ausente' ? '-' : sensor.Tipo }}</span>
             </td>
             
             <td>
