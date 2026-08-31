@@ -1,0 +1,2198 @@
+﻿api\axios.ts:
+import axios from 'axios'
+
+// Obtenemos la ruta actual del navegador (ej. "/001/" o "/")
+let basePath = window.location.pathname;
+
+// Nos aseguramos de que siempre termine en "/" para evitar rutas mal formadas
+if (!basePath.endsWith('/')) {
+  basePath += '/';
+}
+
+export const api = axios.create({
+  baseURL: basePath,
+  withCredentials: true,                // envÃ­a/recibe cookies
+  headers: {
+    "Content-Type": "application/json"
+  }
+})
+
+assets\base.css:
+/* color palette from <https://github.com/vuejs/theme> */
+:root {
+  --vt-c-white: #ffffff;
+  --vt-c-white-soft: #f8f8f8;
+  --vt-c-white-mute: #f2f2f2;
+
+  --vt-c-black: #181818;
+  --vt-c-black-soft: #222222;
+  --vt-c-black-mute: #282828;
+
+  --vt-c-indigo: #2c3e50;
+
+  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
+  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
+  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
+  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+
+  --vt-c-text-light-1: var(--vt-c-indigo);
+  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
+  --vt-c-text-dark-1: var(--vt-c-white);
+  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+}
+
+/* TEMA CLARO (Variables de Vue + TUS VARIABLES) */
+:root {
+  /* Por defecto de Vue */
+  --color-background: var(--vt-c-white);
+  --color-background-soft: var(--vt-c-white-soft);
+  --color-background-mute: var(--vt-c-white-mute);
+  --color-border: var(--vt-c-divider-light-2);
+  --color-border-hover: var(--vt-c-divider-light-1);
+  --color-heading: var(--vt-c-text-light-1);
+  --color-text: var(--vt-c-text-light-1);
+  --section-gap: 160px;
+
+  /* TUS VARIABLES PERSONALIZADAS */
+  --color-bg-main: #f9fafb;
+  --color-bg-white: var(--vt-c-white);
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-title: #1e3a8a;
+  
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-warning-text: #c2410c;
+  
+  --color-input-border: #d1d5db;
+  --color-input-focus: #3b82f6;
+
+  --transition-speed: 0.3s;
+}
+
+/* TEMA OSCURO (Reemplazamos el @media por html.dark para control manual) */
+html.dark {
+  /* Por defecto de Vue */
+  --color-background: var(--vt-c-black);
+  --color-background-soft: var(--vt-c-black-soft);
+  --color-background-mute: var(--vt-c-black-mute);
+  --color-border: var(--vt-c-divider-dark-2);
+  --color-border-hover: var(--vt-c-divider-dark-1);
+  --color-heading: var(--vt-c-text-dark-1);
+  --color-text: var(--vt-c-text-dark-2);
+
+  /* TUS VARIABLES ADAPTADAS AL OSCURO (Aprovechando la paleta de Vue) */
+  --color-bg-main: var(--vt-c-black);
+  --color-bg-white: var(--vt-c-black-soft);
+  --color-text-primary: var(--vt-c-white);
+  --color-text-secondary: var(--vt-c-text-dark-2);
+  --color-text-title: #60a5fa; /* Azul mÃ¡s claro para que resalte en oscuro */
+  
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-danger: #ef4444;
+  --color-danger-hover: #f87171;
+  --color-warning-text: #fb923c;
+  
+  --color-input-border: var(--vt-c-divider-dark-1);
+}
+
+/* Estilos globales de Vue (Sin tocar) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-background);
+  transition: color 0.5s, background-color 0.5s;
+  line-height: 1.6;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+assets\main.css:
+@import './base.css';
+
+#app {
+  width: 100%;
+  font-weight: normal;
+}
+
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.4s;
+  padding: 3px;
+}
+
+@media (hover: hover) {
+  a:hover {
+    background-color: hsla(160, 100%, 37%, 0.2);
+  }
+}
+
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: Arial, sans-serif; 
+}
+
+
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+components\DashboardPanel.vue:
+<script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
+
+const auth = useAuthStore()
+const router = useRouter()
+let pollInterval: any = null
+
+// El onMounted solo se ejecuta si v-if="auth.isAuthenticated" se cumple en el padre
+onMounted(() => {
+  auth.fetchDashboardData()
+  
+  // Polling de 10 segundos
+  pollInterval = setInterval(async () => {
+    await auth.checkSession() // Verificamos si seguimos vivos
+    if (!auth.isAuthenticated) {
+      router.push('/') // Expulsamos al Inicio/Bienvenida
+      return
+    }
+    await auth.fetchDashboardData()
+  }, 10000)
+})
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval)
+})
+
+// Nos traemos la funciÃ³n de los colores que antes vivÃ­a en la tarjeta eliminada
+const getStatusClass = (estado: string) => {
+  switch (estado) {
+    case 'OK': return 'status-ok'
+    case 'Desconectado':
+    case 'Inactivo': return 'status-error'
+    case 'Fuera de rango': return 'status-warning'
+    case 'Repitiendo': return 'status-info'
+    case 'Ausente': return 'status-error'
+    default: return 'status-default'
+  }
+}
+
+//Funcion para formar el nombre correcto de los canales
+const formatearNombreCanales = (sensor: any) => {
+  if (!sensor.Canales || sensor.Nombre === 'Sin Nombre') return sensor.Canales?.join(', ') || '';
+  
+  return sensor.Canales.map((canal: string) => {
+    if (canal === 'AD') return sensor.Nombre;
+    if (canal.startsWith('Eje ')) return `${sensor.Nombre}.${canal.split(' ')[1]}`;
+    return `${sensor.Nombre}.${canal}`;
+  }).join(', ');
+}
+
+</script>
+
+<template>
+  <div class="dashboard-section">
+    <h2>Estado del Hardware</h2>
+
+    <div v-if="auth.loadingDashboard" class="status-msg loading-msg">
+      Conectando con el dispositivo y obteniendo sensores...
+    </div>
+
+    <div v-else-if="auth.errorDashboard" class="status-msg error-msg">
+      {{ auth.errorDashboard }}
+    </div>
+
+    <div v-else-if="auth.sensoresUI.length === 0" class="status-msg no-data-msg">
+      No se han detectado sensores fÃ­sicos en el sistema en este momento.
+    </div>
+
+    <!-- NUEVA VISTA DE TABLA RESUMIDA -->
+    <div v-else class="table-container">
+      <table class="dashboard-table">
+        <thead>
+          <tr>
+            <th class="col-pos">PosiciÃ³n</th>
+            <th>Nombre del Sensor</th>
+            <th>Tipo</th>
+            <th>Capacidades (Pasa el ratÃ³n para ver detalles)</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="sensor in auth.sensoresUI" :key="sensor.Posicion">
+            
+            <td class="col-pos font-bold">{{ sensor.Posicion }}</td>
+            
+            <td>
+              <!-- LÃ³gica de advertencia si el sensor existe pero no tiene Nodo -->
+              <span v-if="sensor.Nombre !== 'Sin Nombre'" class="sensor-name">
+                {{ sensor.Nombre }}
+              </span>
+              <span v-else class="warning-text" title="Se ha detectado fÃ­sicamente pero no tiene un Nodo asignado en la configuraciÃ³n">
+                Sin Nodo Asignado
+              </span>
+            </td>
+            
+            <td>
+              <span class="sensor-type">{{ sensor.EstadoSalud === 'Ausente' ? '-' : sensor.Tipo }}</span>
+            </td>
+            
+            <td>
+              <div class="summary-pills">
+                <!-- Uso de Tooltips Nativos (Atributo 'title') para manejar arrays gigantes -->
+                <span v-if="sensor.Canales && sensor.Canales.length > 0" 
+                      class="pill pill-channels" 
+                      :title="formatearNombreCanales(sensor)">
+                  {{ sensor.Canales.length }} Canales
+                </span>
+                
+                <span v-if="sensor.Estados && sensor.Estados.length > 0" 
+                      class="pill pill-states" 
+                      :title="sensor.Estados.join(', ')">
+                  {{ sensor.Estados.length }} Estados
+                </span>
+                
+                <span v-if="(!sensor.Canales || sensor.Canales.length === 0) && (!sensor.Estados || sensor.Estados.length === 0)" 
+                      class="text-muted">
+                  Sin capacidades
+                </span>
+              </div>
+            </td>
+            
+            <td>
+              <div class="status-indicator">
+                <span :class="['status-dot', getStatusClass(sensor.EstadoSalud)]"></span>
+                {{ sensor.EstadoSalud }}
+              </div>
+            </td>
+            
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.dashboard-section {
+  margin-top: 50px;
+  width: 100%;
+  max-width: 1200px; 
+}
+
+.dashboard-section h2 {
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 10px;
+  margin-bottom: 25px;
+  color: #111827;
+}
+
+.status-msg {
+  padding: 15px;
+  border-radius: 6px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+.loading-msg { background-color: #f3f4f6; color: #374151; }
+.error-msg { background-color: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.no-data-msg { background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+
+/* ESTILOS DE LA TABLA */
+.table-container {
+  background-color: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.dashboard-table thead {
+  background-color: #f9fafb;
+}
+
+.dashboard-table th {
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dashboard-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+
+.dashboard-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.dashboard-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.col-pos {
+  text-align: center;
+  width: 80px;
+}
+
+.font-bold {
+  font-weight: bold;
+  color: #374151;
+}
+
+.sensor-name {
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+.warning-text {
+  color: #d97706;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: help;
+}
+
+.sensor-type {
+  background-color: #e5e7eb;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #374151;
+}
+
+/* PIÃLDORAS RESUMEN DE CAPACIDADES */
+.summary-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.pill {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: help; /* Cambia el cursor al pasar por encima para indicar interactividad */
+}
+
+.pill-channels {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.pill-states {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+  border: 1px solid #e9d5ff;
+}
+
+.text-muted {
+  color: #9ca3af;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+/* INDICADOR DE ESTADO (Heredado de la tarjeta) */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-ok { background-color: #22c55e; box-shadow: 0 0 4px #22c55e; }
+.status-error { background-color: #ef4444; box-shadow: 0 0 4px #ef4444; }
+.status-warning { background-color: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
+.status-info { background-color: #3b82f6; box-shadow: 0 0 4px #3b82f6; }
+.status-default { background-color: #9ca3af; }
+</style>
+components\Logo.vue:
+<template>
+  <router-link :to="{ name: 'home' }" class="logo-link">
+    <img src="/public/Logo_ReMo.svg" alt="Logo" class="logo" />
+  </router-link>
+</template>
+
+<style scoped>
+.logo-link {
+  display: inline-block; /* Mantiene el tamaÃ±o ajustado a la imagen */
+  text-decoration: none; /* Evita cualquier subrayado por defecto de los enlaces */
+  cursor: pointer;
+}
+
+.logo {
+  width: 150px;
+  display: block;
+}
+</style>
+
+components\MeasureCard.vue:
+<script setup lang="ts">
+import type { MedidaItem } from '@/types/measures'
+
+defineProps<{
+  medida: MedidaItem
+}>()
+
+const emit = defineEmits<{
+  (e: 'edit', medida: MedidaItem): void
+  (e: 'delete', medida: MedidaItem): void
+}>()
+
+const formatFecha = (isoString?: string) => {
+  if (!isoString) return 'Sin definir'
+  if (isoString.startsWith('1904')) return 'Siempre (Activa)'
+  if (isoString.startsWith('2999')) return 'Infinito'
+  
+  try {
+    const date = new Date(isoString)
+    return date.toLocaleString(undefined, { 
+      year: 'numeric', month: 'short', day: 'numeric', 
+      hour: '2-digit', minute: '2-digit' 
+    })
+  } catch {
+    return isoString
+  }
+}
+</script>
+
+<template>
+  <div class="measure-card">
+    <div class="card-header">
+      <h3 class="measure-name">{{ medida.Nombre }}</h3>
+      <span class="badge" :class="medida.Activo !== false ? 'badge-active' : 'badge-inactive'">
+        {{ medida.Activo !== false ? 'Activa' : 'Inactiva' }}
+      </span>
+    </div>
+
+    <div class="card-body">
+      <div class="info-row">
+        <strong>Captura:</strong> 
+        <span>{{ medida.Captura?.Duracion ?? 0 }}s x {{ medida.Captura?.Bloques ?? 0 }} blq</span>
+      </div>
+      
+      <div class="info-row">
+        <strong>Periodicidad:</strong> 
+        <span>{{ medida.Programacion?.Periodicidad ?? 'Ãšnico' }}</span>
+      </div>
+      
+      <div v-if="medida.Programacion?.Intervalos && medida.Programacion.Intervalos.length > 0" class="info-row">
+        <strong>Intervalos (s):</strong> 
+        <span class="text-data">{{ medida.Programacion.Intervalos.join(', ') }}</span>
+      </div>
+
+      <div v-if="medida.Trigger?.Tipo === 'Timed' || (medida.Programacion?.Inicio && medida.Programacion.Inicio !== '')" class="dynamic-section time-section">
+        <div class="info-row-small">
+          <strong>Inicio:</strong> <span>{{ formatFecha(medida.Programacion?.Inicio) }}</span>
+        </div>
+        <div class="info-row-small">
+          <strong>Fin:</strong> <span>{{ formatFecha(medida.Programacion?.Fin) }}</span>
+        </div>
+      </div>
+
+      <div v-if="medida.Trigger?.Tipo === 'Level'" class="dynamic-section trigger-level">
+        <strong>Disparo por Nivel (Level):</strong>
+        <ul class="level-list">
+          <li v-for="(nivel, idx) in medida.Trigger.Niveles" :key="idx">
+            {{ nivel.Canal }} > {{ nivel.Umbral }}
+          </li>
+        </ul>
+      </div>
+      
+      <div v-else class="dynamic-section trigger-timed">
+        <strong>Disparo:</strong> <span>Por Tiempo (Timed)</span>
+      </div>
+
+      <div v-if="medida.Prebuffer !== undefined && medida.Prebuffer > 0" class="info-row">
+        <strong>Prebuffer:</strong> <span>{{ medida.Prebuffer }} segundos</span>
+      </div>
+
+      <div v-if="medida.Procesado && medida.Procesado.length > 0" class="process-wrapper">
+        <strong class="process-title">Procesado:</strong>
+        <div class="process-tags">
+          <template v-for="(proc, idx) in medida.Procesado" :key="idx">
+            <!-- Si detecta el *, pinta una tarjeta especial -->
+            <span v-if="proc.Nombre === '*'" class="proc-badge default-badge">
+              Todos los procesados por defecto
+            </span>
+            <span v-else class="proc-badge" :title="proc.Config ? 'Config: ' + proc.Config : 'Sin config extra'">
+              {{ proc.Nombre }}
+            </span>
+          </template>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card-footer">
+      <button @click="emit('edit', medida)" class="btn-action edit">Modificar</button>
+      <button @click="emit('delete', medida)" class="btn-action delete">Eliminar</button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* Estilos intactos, solo aÃ±ado el color de la tarjeta default de procesado */
+.measure-card { background-color: var(--color-bg-white); border: 1px solid var(--color-border); color: var(--color-text-primary); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s; }
+.measure-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.card-header { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid var(--color-border, #f3f4f6); background-color: var(--color-bg-main, #f9fafb); border-radius: 8px 8px 0 0; }
+.measure-name { margin: 0; font-size: 1.1rem; color: var(--color-text-title, #1e3a8a); font-weight: bold; }
+.badge { padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
+.badge-active { background-color: var(--color-badge-active-bg, #d1fae5); color: var(--color-badge-active-text, #065f46); }
+.badge-inactive { background-color: var(--color-badge-inactive-bg, #f3f4f6); color: var(--color-badge-inactive-text, #4b5563); }
+.card-body { padding: 15px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.info-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; color: var(--color-text-secondary, #374151); }
+.info-row-small { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--color-text-secondary, #4b5563); margin-bottom: 3px; }
+.text-data { font-family: monospace; background-color: var(--color-bg-main, #f3f4f6); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+.dynamic-section { margin-top: 5px; padding: 10px; border-radius: 6px; font-size: 0.85rem; }
+.time-section { background-color: var(--color-bg-main, #f8fafc); border: 1px solid var(--color-border, #e2e8f0); padding: 8px 10px; }
+.trigger-level { background-color: var(--color-bg-main, #fff7ed); border: 1px solid var(--color-border, #fed7aa); }
+.trigger-timed { background-color: var(--color-bg-main, #f0fdf4); border: 1px solid var(--color-border, #bbf7d0); display: flex; justify-content: space-between; }
+.level-list { margin: 5px 0 0 0; padding-left: 20px; color: var(--color-warning-text, #c2410c); }
+.process-wrapper { margin-top: 5px; padding-top: 10px; border-top: 1px dashed var(--color-border, #e5e7eb); }
+.process-title { font-size: 0.85rem; color: var(--color-text-secondary, #374151); display: block; margin-bottom: 6px; }
+.process-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.proc-badge { background-color: var(--color-primary, #2563eb); color: #ffffff; font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: bold; cursor: help; }
+.default-badge { background-color: #166534; } /* NUEVO: Color verde para el procesado * */
+.card-footer { padding: 10px 15px; border-top: 1px solid var(--color-border, #f3f4f6); display: flex; justify-content: flex-end; gap: 10px; }
+.btn-action { background: none; border: none; font-weight: bold; cursor: pointer; padding: 6px 10px; border-radius: 4px; transition: background-color 0.2s, color 0.2s; }
+.edit { color: var(--color-primary, #2563eb); }
+.edit:hover { background-color: var(--color-bg-main, #eff6ff); }
+.delete { color: var(--color-danger, #dc2626); }
+.delete:hover { background-color: var(--color-bg-main, #fef2f2); }
+</style>
+controller\UserVerification.ts:
+import { useAuthStore } from '@/stores/authStore'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
+
+interface LoginCredentials {
+    username: string;
+    password: string;
+}
+
+export const useUserVerification = () => {
+  const loading = ref(false)
+  const error = ref('')
+  const router = useRouter()
+  const authStore = useAuthStore()
+
+  const verifyUser = async (credentials: LoginCredentials) => {
+    loading.value = true
+    error.value = ''
+    console.log('Verifying user with credentials:', credentials)
+    try {
+      const loginData = new FormData()
+      loginData.append('username', credentials.username)
+      loginData.append('password', credentials.password)
+      console.log('FormData prepared:', Array.from(loginData.entries()))
+      const response = await axios.post('http://remo.tel.uva.es/30021/remo/Server/Logout', loginData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        withCredentials: false
+      })
+      response.data = JSON.parse(response.data);
+      console.log(`Login response: ${response.data}`)
+      // Redirigir al usuario a la pÃ¡gina principal
+      router.push({ name: 'home' })
+
+
+      console.log(`Cookies: ${document.cookie}`)
+
+
+      return true
+
+    } catch (e: unknown) {
+      if (axios.isAxiosError(e)) {
+        if (e.response?.status === 401) {
+          error.value = 'Usuario o contraseÃ±a incorrectos'
+        } else if (e.response?.status === 400) {
+          error.value = 'Datos de formulario invÃ¡lidos'
+        } else if (e.response?.status === 429) {
+          error.value = 'Demasiados intentos. Por favor, espera un momento'
+        } else {
+          error.value = 'Error al intentar iniciar sesiÃ³n'
+        }
+      } else {
+        error.value = 'Error de conexiÃ³n'
+        console.error('Error no manejado:', e)
+      }
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+  return { verifyUser,loading, error }
+}
+
+router\index.ts:
+import { createRouter, createWebHashHistory } from 'vue-router'
+import HomeView from '@/views/HomeView.vue'
+import LoginView from '@/views/LoginView.vue'
+import ConfigView from '@/views/ConfigurationView.vue'
+import MeasuresView from '@/views/MeasuresView.vue'
+import { useAuthStore } from '@/stores/authStore'
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    { path: '/',      name: 'home',   component: HomeView },
+    { path: '/login', name: 'login',  component: LoginView },
+    { 
+      path: '/config',
+      name: 'config',
+      component: ConfigView,
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/measures',
+      name: 'measures',
+      component: MeasuresView,
+      meta: { requiresAuth: true}
+    }
+  ]
+})
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore()
+
+  // Esperar la verificaciÃ³n de la sesiÃ³n
+  if (to.meta.requiresAuth) {
+    await auth.checkSession()
+  }
+
+  //Si es necesaria la verificaciÃ³n de la sesiÃ³n, se comprueba tambiÃ©n que se haya completado con Ã©xito
+  if (to.meta.requiresAuth && !auth.isAuthenticated) {
+    return { name: 'login' }
+  }
+})
+
+export default router
+
+stores\authStore.ts:
+import { defineStore } from 'pinia'
+import { api } from '@/api/axios'
+import type { SensorDetectado, EstadoSensor, SensorTarjetaUI } from '@/types/remo'
+
+interface User {
+  Usuario: string;
+  Nivel: number;
+}
+
+interface AuthState {
+  user: User | null
+  isAuthenticated: boolean
+  loading: boolean
+  //Nuevos parÃ¡metros de la pÃ¡gina, los sensores y sus estados
+  sensoresUI: SensorTarjetaUI[]
+  loadingDashboard: boolean
+  errorDashboard: string
+}
+
+export const useAuthStore = defineStore('auth', {
+  state: (): AuthState => ({
+    user: null,
+    isAuthenticated: false,
+    loading: false,
+    sensoresUI: [],
+    loadingDashboard: false,
+    errorDashboard: ''
+  }),
+
+  getters: {
+    canalesDisponibles: (state): string[] => {
+      const canalesFisicos: string[] = [];
+      
+      state.sensoresUI.forEach(sensor => {
+        if (!sensor.Canales || sensor.Canales.length === 0) return;
+        
+        sensor.Canales.forEach(canal => {
+          if (canal === 'AD') {
+            // Si es AD, el nombre del canal es directamente el nombre del nodo
+            canalesFisicos.push(sensor.Nombre); 
+          } else if (canal.startsWith('Eje ')) {
+            // Si es ATH, extrae la letra (X, Y, Z) y la concatena con un punto
+            const eje = canal.split(' ')[1]; 
+            canalesFisicos.push(`${sensor.Nombre}.${eje}`); 
+          } else {
+            // Por seguridad ante futuros sensores
+            canalesFisicos.push(`${sensor.Nombre}.${canal}`); 
+          }
+        });
+      });
+      
+      return canalesFisicos;
+    }
+  },
+
+  actions: {
+    async login(username: string, password: string) {
+      // const data = "username=" + encodeURIComponent(username) + "&password=" + encodeURIComponent(password);
+      const data = {
+        username: username.trim(),
+        password: btoa(btoa(password)) //no era url-encoded, es un doble cifrado basico de base 64
+      }; /*btoa() es una funcion que realiza un cifrado en base 64, 
+      al necesitar un cifrado doble, se ejecuta dos veces*/
+      this.loading = true
+      try {
+        await api.post('/remo/Server/Login', data, {
+          headers: {
+            'Content-Type': 'application/x-www-urlencoded',
+            'Accept': '*/*'
+          },
+          withCredentials: true
+        })
+        await this.checkSession()
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async checkSession() {
+      try {
+        const res = await api.get<User>('/remo/Server/CheckAuth', {
+          withCredentials: true
+        })
+        if (res.data && res.data.Usuario) {
+          this.user = res.data;
+          this.isAuthenticated = true;
+
+        }
+      } catch {
+        this.user = null
+        this.isAuthenticated = false
+      }
+    },
+
+    async logout() {
+      await api.get('/remo/Server/Logout')
+      this.user = null
+      this.isAuthenticated = false
+      //Vaciamos el dashboard si cierras la sesiÃ³n
+      this.sensoresUI = []
+      this.errorDashboard = ''
+    },
+
+    async fetchDashboardData() {
+      // ProtecciÃ³n: No solicitamos datos si no estamos logueados
+      if (!this.isAuthenticated) return
+
+      this.loadingDashboard = true
+      this.errorDashboard = ''
+
+      try {
+        // Lanzamos las peticiones en paralelo hacia el backend de LabVIEW
+        //MUY IMPORTANTE: LA DOCUMENTACION DE HAY UNA ERRATA CON LA URL, PONE "GENERADOR" Y ES "GENERATOR"
+        /*const [resSensores, resEstados, resNodos] = await Promise.all([
+          api.get<SensorDetectado[]>('/remo/Status/?Seccion=Generator&Key=Sensores', { withCredentials: true }),
+          api.get<EstadoSensor[]>('/remo/Status/?Seccion=Generator&Key=Estado', { withCredentials: true }),
+          api.get<any>('/remo/Config/?Seccion=Gestor.Nodos', { withCredentials: true })
+        ])*/
+
+        //Version despues de annadir a Status la seccion Gestor.Nodos
+        const res = await api.get<any>('/remo/Status/?Seccion=Gestor&Key=Nodos', { withCredentials: true })
+        
+
+        // const safeParse = (data: any) => {
+        //   if (typeof data === 'string') {
+        //     if (data.trim() === '') return [] // String vacÃ­o -> Array vacÃ­o
+        //     try {
+        //       return JSON.parse(data)
+        //     } catch (e) {
+        //       console.warn("Error al leer el formato del JSON de recibido:", data)
+        //       return []
+        //     }
+        //   }
+        //   return data || []
+        // }
+
+        const nodos = res.data
+
+        // Realizamos la fusiÃ³n de los datos usando la posiciÃ³n
+        if (Array.isArray(nodos) && nodos.length > 0) {
+          // 2. Filtramos y Mapeamos los datos
+          this.sensoresUI = nodos
+            // Mapeo: Extraemos los datos del sub-objeto "Sensor" hacia la raÃ­z para mantener compatibilidad
+            .map((nodo: any) => ({
+              Posicion: nodo.Sensor.Posicion,
+              Tipo: nodo.Sensor.Tipo,
+              Canales: nodo.Sensor.Canales,
+              Estados: nodo.Sensor.Estados,
+              Nombre: nodo.Nombre,
+              Coordenadas: nodo.Posicion, // Coordenadas 3D
+              EstadoSalud: nodo.Estado
+            }))
+        } else {
+          // Si LabVIEW devuelve vacÃ­o o algo que no reconocemos, dejamos el dashboard vacÃ­o
+          this.sensoresUI = []
+        }
+
+      } catch (error) {
+        console.error("Error al cargar datos del hardware en el Store:", error)
+        this.errorDashboard = "No se pudo obtener el estado de los sensores. Comprueba la conexiÃ³n."
+      } finally {
+        this.loadingDashboard = false
+      }
+    }
+  }
+})
+
+stores\measureStore.ts:
+import { defineStore } from 'pinia'
+import { api } from '@/api/axios'
+import type { MedidaItem, ConfigMedidasResponse } from '@/types/measures'
+
+interface MeasuresState {
+  listaMedidas: MedidaItem[]
+  listaDatas: string[]
+  loading: boolean
+  error: string
+  successMsg: string
+}
+
+export const useMeasuresStore = defineStore('measures', {
+  state: (): MeasuresState => ({
+    listaMedidas: [],
+    listaDatas: [],
+    loading: false,
+    error: '',
+    successMsg: ''
+  }),
+
+  actions: {
+    //LECTURA: Trae las medidas desde la secciÃ³n correspondiente de la configuraciÃ³n
+    async fetchMedidas() {
+      this.loading = true
+      this.error = ''
+      this.successMsg = ''
+
+      try {
+
+        // Hacemos las dos peticiones en paralelo a la configuraciÃ³n
+        const [resMedidas, resDatas] = await Promise.all([
+          api.get<any>('/remo/Config/?Seccion=Gestor.Medidas', { withCredentials: true }),
+          api.get<any>('/remo/Config/?Seccion=Gestor.Datas', { withCredentials: true })
+        ])
+
+        // 1. Guardar Medidas
+        if (resMedidas.data && Array.isArray(resMedidas.data)) {
+          this.listaMedidas = resMedidas.data
+        } else {
+          this.listaMedidas = []
+        }
+
+        // 2. Guardar nombres de Datas
+        // Mapeamos el array para quedarnos ÃšNICAMENTE con la propiedad "Nombre" de cada conjunto
+        if (resDatas.data && Array.isArray(resDatas.data)) {
+          this.listaDatas = resDatas.data.map((item: any) => item.Nombre).filter(Boolean)
+        } else {
+          this.listaDatas = []
+        }
+
+      } catch (err) {
+        console.error("Error al obtener las medidas de la configuraciÃ³n:", err)
+        this.error = "No se pudieron cargar las medidas del sistema."
+      } finally {
+        this.loading = false
+      }
+    },
+
+    //ESCRITURA: Envia una o varias medidas al endpoint dedicado (POST /remo/Medida)
+    //Sirve tanto para aÃ±adir, modificar o eliminar (segÃºn las reglas de LabVIEW)
+    async guardarMedida(payload: MedidaItem | { Nombre: string}) {
+      this.loading = true
+      this.error = ''
+      this.successMsg = ''
+
+      try {
+        // Mandamos la lista de medidas en el cuerpo de la solicitud JSON
+        await api.post('/remo/Medida', payload, { withCredentials: true })
+        this.successMsg = "Cambios aplicados correctamente en el dispositivo."
+        
+        // Refrescamos la lista local volviendo a pedir la configuraciÃ³n para asegurar sincronÃ­a
+        await this.fetchMedidas()
+      } catch (err) {
+        console.error("Error al enviar la medida al endpoint:", err)
+        this.error = "Error al aplicar los cambios en las medidas del hardware."
+        throw err // Lo lanzamos por si el componente quiere reaccionar al fallo
+      } finally {
+        this.loading = false
+      }
+    }
+  }
+})
+types\measures.ts:
+//Tipado de los JSON recogidos para las medidas
+
+export type PeriodicidadMedida = "Unico" | "Continuo" | "Fija" | "Hora" | "DÃ­a" | "Semana" | "Mes" | "AÃ±o";
+export type TipoTriggerMedida = "Timed" | "Level";
+
+export interface CapturaMedida {
+  Duracion: number;
+  Bloques: number;
+}
+
+export interface NivelTrigger {
+  Canal: string;
+  Umbral: number;
+}
+
+export interface TriggerMedida {
+  Tipo: TipoTriggerMedida;
+  Niveles: NivelTrigger[];
+}
+
+export interface ProgramacionMedida {
+  Inicio: string; // Formato string (generalmente ISO o fecha/hora de LabVIEW)
+  Fin: string;
+  Periodicidad: PeriodicidadMedida;
+  Intervalos: number[];
+}
+
+export interface ProcesadoMedida {
+  Nombre: string;
+  Config: string;
+}
+
+// Estructura de un objeto individual "Medida" segÃºn el Schema
+export interface MedidaItem {
+  Nombre: string;
+  Activo: boolean;
+  Data: string;
+  Captura: CapturaMedida;
+  Prebuffer: number;
+  Programacion: ProgramacionMedida;
+  Trigger: TriggerMedida;
+  Procesado: ProcesadoMedida[];
+}
+
+// Estructura que devuelve el GET /remo/Config/?Seccion=Medidas
+export interface ConfigMedidasResponse {
+  Medidas: MedidaItem[];
+}
+types\remo.ts:
+// Tipados de los JSON obtenidos del Backend para la deteccion de los sensores y el estado de los mismos, y tambien para los datos de Gestor.Nodos
+
+export type TipoSensor = "ATH" | "AD" | "TH" | "None";
+export type EstadoSaludSensor = "OK" | "Desconectado" | "Inactivo" | "Fuera de rango" | "Repitiendo" | "Ausente";
+
+// Sensores devueltos por GET /remo/Status/?Seccion=Generador&Key=Sensores
+export interface SensorDetectado {
+  Tipo: TipoSensor;
+  Canales: string[]; // Ej: ["Eje X", "Eje Y", "Eje Z"] o ["AD"]
+  Estados: string[]; // Ej: ["Temperatura", "Humedad"] o []
+  Posicion: number;
+}
+
+// Estados de los sensores, devueltos por GET /remo/Status/?Seccion=Generador&Key=Estado
+export interface EstadoSensor {
+  Posicion: number;
+  Estado: EstadoSaludSensor;
+}
+
+// Posicion tridimensional sacada de Gestor.Nodos
+export interface Coordenadas {
+  x: number;
+  y: number;
+  z: number;
+}
+
+//Conjunto de datos de los nodos configurados en la maquina, se saca de Gestor.Nodos
+export interface NodoData {
+  Sensor: number;
+  Nombre: string;
+  Posicion: Coordenadas;
+}
+
+// Interfaz combinada de los sensores con sus estados, enlazados por la posiciÃ³n
+export interface SensorTarjetaUI extends SensorDetectado {
+  EstadoSalud: EstadoSaludSensor; // AÃ±adimos la salud cruzando el dato de la Posicion
+  Nombre: string;
+  Coordenadas: Coordenadas;
+}
+views\AboutView.vue:
+<template>
+  <div class="about">
+    <h1>This is an about page</h1>
+  </div>
+</template>
+
+<style>
+@media (min-width: 1024px) {
+  .about {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+  }
+}
+</style>
+
+views\ConfigurationView.vue:
+<script setup lang="ts">
+import { useAuthStore } from '@/stores/authStore'
+const auth = useAuthStore()
+</script>
+
+<template>
+  <div>
+    <h1>ConfiguraciÃ³n</h1>
+
+    <p>Has accedido porque estÃ¡s autenticado.</p>
+
+    <button @click="auth.logout">Cerrar sesiÃ³n</button>
+  </div>
+</template>
+
+views\HomeView.vue:
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import { useAuthStore } from '@/stores/authStore'
+import DashboardPanel from '@/components/DashboardPanel.vue'
+
+const auth = useAuthStore()
+
+const handleLogout = async () => {
+  try {
+    await auth.logout() 
+  } catch (error) {
+    console.error("Error al cerrar sesiÃ³n", error)
+  }
+}
+
+onMounted(() => {
+  auth.checkSession()
+})
+
+</script>
+
+<template>
+  <div class="home-container">
+    
+    <h1>{{ auth.isAuthenticated ? `Bienvenido, ${auth.user?.Usuario}` : 'Bienvenido a la pÃ¡gina' }}</h1>
+
+    <div class="links">
+      <router-link v-if="!auth.isAuthenticated" to="/login">Iniciar SesiÃ³n</router-link>
+      <button v-else @click="handleLogout" class="logout-button">Cerrar sesiÃ³n</button>
+      <router-link to="/config">ConfiguraciÃ³n</router-link>
+      <router-link to="/measures">Medidas</router-link>
+    </div>
+
+    <DashboardPanel v-if="auth.isAuthenticated" />
+
+  </div>
+</template>
+
+<style scoped>
+.links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin-top: 40px;
+}
+
+.home-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center; 
+  text-align: center;
+}
+
+/* estilo del boton de logout para cohesiÃ³n con el estilo nativo de Vue */
+.logout-button {
+  background-color: transparent; /* Quitamos el fondo gris del botÃ³n */
+  border: none;                  /* Quitamos el borde */
+  font-family: inherit;          /* Usamos la misma fuente que el resto */
+  font-size: inherit;            /* Usamos el mismo tamaÃ±o de letra */
+  cursor: pointer;
+  
+  /* Propiedades encontradas del main.css de Vue */
+  padding: 3px;
+  transition: 0.4s;
+  
+  /* Color rojo en el mismo formato HSLA que usa Vue */
+  color: hsla(0, 100%, 45%, 1); 
+}
+
+.logout-button:hover {
+  background-color: hsla(0, 100%, 45%, 0.2); 
+}
+
+</style>
+
+views\LoginView.vue:
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useAuthStore } from '@/stores/authStore'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const auth = useAuthStore()
+
+const username = ref('')
+const password = ref('')
+const errorMessage = ref('')
+
+async function handleLogin() {
+  errorMessage.value = ''
+  try{
+    await auth.login(username.value, password.value)
+    if (auth.isAuthenticated) {
+      router.push({ name: 'home' })
+    } else {
+      errorMessage.value = "Usuario o contraseÃ±a incorrectos"
+    }
+  } catch (error: any){
+    if (error.response && error.response.status === 401) {
+      errorMessage.value = "Usuario o contraseÃ±a incorrectos."
+    } else {
+      errorMessage.value = "Error al conectar con el servidor."
+    }
+  }
+}
+
+const clearError = () => {
+  errorMessage.value = ''
+}
+
+</script>
+
+<template>
+  <div>
+    <h1>Login</h1>
+
+    <form @submit.prevent="handleLogin" class="login-form">
+      <input v-model="username" type="text" placeholder="Usuario" required @input="clearError"/>
+      <input v-model="password" type="password" placeholder="ContraseÃ±a" required @input="clearError"/>
+  
+      <p v-if="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </p>
+
+      <button type="submit" :disabled="auth.loading"> 
+        {{ auth.loading ? 'Iniciando sesiÃ³n...' : 'Acceder'}} 
+      </button>
+    </form>
+  </div>
+</template>
+
+<style scoped>
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* AÃ±ade un espacio de 15px entre cada elemento */
+  width: 100%;
+  max-width: 300px; /* Evita que el formulario sea demasiado ancho en pantallas grandes */
+}
+
+.error-message {
+  color: red; /* Rojo */
+  font-size: 14px;
+  font-weight: bold;
+  margin: 0;
+  text-align: center;
+}
+
+button:disabled{
+  cursor: not-allowed;
+}
+
+</style>
+views\MeasuresView.vue:
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/authStore';
+import { useMeasuresStore } from '@/stores/measureStore';
+import type { MedidaItem } from '@/types/measures';
+import MeasureCard from '@/components/MeasureCard.vue';
+
+const authStore = useAuthStore();
+const measuresStore = useMeasuresStore(); const router = useRouter();
+let pollInterval: any = null;
+
+const isPanelOpen = ref(false);
+const isEditing = ref(false);
+
+// --- ESTADOS INTERMEDIOS PARA LA INTERFAZ (UI) ---
+// Estos estados hacen que el formulario sea amigable. Al guardar, los convertimos al JSON de LabVIEW.
+
+// 1. Fechas
+const modoInicio = ref<'siempre' | 'fecha'>('siempre');
+const modoFin = ref<'infinito' | 'fecha'>('infinito');
+
+// 2. Canales, ELIMINADA, las datas se cogen de las opciones en Gestor.Datas
+//const modoData = ref<'todos' | 'seleccion'>('todos');
+//const canalesSeleccionados = ref<string[]>([]);
+
+// 3. Intervalos
+interface IntervaloUI { valor: number; unidad: 'segundos' | 'minutos' | 'horas' }
+const intervalosUI = ref<IntervaloUI[]>([]);
+
+// 4. Procesados
+interface ProcesadoUI { Nombre: string; Config: string; isCustom: boolean }
+const procesadosUI = ref<ProcesadoUI[]>([]);
+const opcionesProcesado = ['TA', 'FFT', 'OMA', 'FRF', 'Data'];
+
+
+const getEmptyMeasure = (): MedidaItem => ({
+  Nombre: '',
+  Activo: true,
+  Data: '*',
+  Prebuffer: 0,
+  Captura: { Duracion: 10, Bloques: 1 },
+  Programacion: {
+    Inicio: new Date().toISOString().slice(0, 16),
+    Fin: new Date().toISOString().slice(0, 16),
+    Periodicidad: 'Unico',
+    Intervalos: []
+  },
+  Trigger: { Tipo: 'Timed', Niveles: [] },
+  Procesado: []
+});
+
+const formData = ref<MedidaItem>(getEmptyMeasure());
+
+onMounted(() => {
+  measuresStore.fetchMedidas();
+  authStore.fetchDashboardData();
+
+  pollInterval = setInterval(async () => {
+    await authStore.checkSession();
+    if (!authStore.isAuthenticated) {
+      router.push('/');
+      return;
+    }
+    // No bloqueamos la UI si el usuario estÃ¡ editando
+    if (!isEditing.value && !isPanelOpen.value) {
+      measuresStore.fetchMedidas();
+    }
+  }, 10000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+});
+
+const toLocalDatetime = (utcString: string) => {
+  if (!utcString || !utcString.includes('T')) return '';
+  const date = new Date(utcString);
+  // Restamos el offset de la zona horaria para "engaÃ±ar" al input HTML
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+
+const toUTCDatetime = (localString: string) => {
+  if (!localString) return '';
+  // JS asume que un string ISO sin 'Z' es hora local, y al instanciarlo y pedir .toISOString(), lo convierte a UTC automÃ¡ticamente.
+  return new Date(localString).toISOString();
+};
+
+const openCreatePanel = () => {
+  formData.value = getEmptyMeasure();
+
+  // Reseteamos UI a estados por defecto
+  modoInicio.value = 'siempre';
+  modoFin.value = 'infinito';
+  //ELIMINADA, las datas se cogen de las opciones en Gestor.Datas
+  //modoData.value = 'todos';
+  //canalesSeleccionados.value = [];
+  intervalosUI.value = [];
+  procesadosUI.value = [];
+
+  isEditing.value = false;
+  isPanelOpen.value = true;
+};
+
+const openEditPanel = (medida: MedidaItem) => {
+  const clone = JSON.parse(JSON.stringify(medida));
+  const defaultTemplate = getEmptyMeasure();
+
+  formData.value = {
+    ...defaultTemplate,
+    ...clone,
+    Captura: { ...defaultTemplate.Captura, ...(clone.Captura || {}) },
+    Programacion: { ...defaultTemplate.Programacion, ...(clone.Programacion || {}) },
+    Trigger: { ...defaultTemplate.Trigger, ...(clone.Trigger || {}) }
+  };
+
+  // --- MAPEO INVERSO: JSON de LabVIEW -> UI amigable ---
+
+  // Fechas a botones
+
+  modoInicio.value = formData.value.Programacion.Inicio.startsWith('1904') ? 'siempre' : 'fecha';
+  modoFin.value = formData.value.Programacion.Fin.startsWith('2999') ? 'infinito' : 'fecha';
+
+  if (modoInicio.value === 'fecha') {
+    formData.value.Programacion.Inicio = toLocalDatetime(formData.value.Programacion.Inicio);
+  }
+  if (modoFin.value === 'fecha') {
+    formData.value.Programacion.Fin = toLocalDatetime(formData.value.Programacion.Fin);
+  }
+
+  // AÃ‘ADIR ESTO: Si viene vacÃ­o, forzamos el asterisco por seguridad
+  if (!formData.value.Data) formData.value.Data = '*';
+
+  // Segundos a Intervalos con Unidades Humanas
+  intervalosUI.value = (formData.value.Programacion.Intervalos || []).map(sec => {
+    if (sec >= 3600 && sec % 3600 === 0) return { valor: sec / 3600, unidad: 'horas' };
+    if (sec >= 60 && sec % 60 === 0) return { valor: sec / 60, unidad: 'minutos' };
+    return { valor: sec, unidad: 'segundos' };
+  });
+
+  // Procesados (Ocultamos el * si existe)
+  if (formData.value.Procesado?.length === 1 && formData.value.Procesado[0].Nombre === '*') {
+    procesadosUI.value = [];
+  } else {
+    procesadosUI.value = (formData.value.Procesado || []).map(p => ({
+      Nombre: p.Nombre,
+      Config: p.Config || '',
+      isCustom: !!p.Config && p.Config.trim() !== ''
+    }));
+  }
+
+  isEditing.value = true;
+  isPanelOpen.value = true;
+};
+
+const closePanel = () => {
+  isPanelOpen.value = false;
+};
+
+// GESTIÃ“N NIVELES TRIGGER
+const addNivel = () => {
+  if (!formData.value.Trigger.Niveles) formData.value.Trigger.Niveles = [];
+  formData.value.Trigger.Niveles.push({ Canal: '', Umbral: 1.0 });
+};
+const removeNivel = (idx: number) => {
+  formData.value.Trigger.Niveles.splice(idx, 1);
+};
+
+
+// GUARDADO
+const guardarFormulario = async () => {
+  // Paso previo: comprobar que se introduzca un nombre para la medida
+  if (!formData.value.Nombre.trim()) {
+    alert("El nombre de la medida es obligatorio.");
+    return;
+  }
+
+  // Paso previo: Validar LÃ­mites de Intervalos
+  const limitMap: Record<string, number> = {
+    'Hora': 3599, 'DÃ­a': 86399, 'Semana': 604799, 'Mes': 2678399, 'AÃ±o': 31535999
+  };
+  const periodicidad = formData.value.Programacion.Periodicidad;
+
+  if (limitMap[periodicidad]) {
+    const maxLimit = limitMap[periodicidad];
+    for (const intv of intervalosUI.value) {
+      const secs = intv.unidad === 'horas' ? intv.valor * 3600 : intv.unidad === 'minutos' ? intv.valor * 60 : intv.valor;
+      if (secs > maxLimit) {
+        alert(`Error matemÃ¡tico: Un intervalo de ${secs} segundos supera el lÃ­mite permitido para la periodicidad "${periodicidad}" (MÃ¡x: ${maxLimit}s).`);
+        return; // Bloquea el guardado
+      }
+    }
+  }
+
+  // 1. Reconstruir Fechas a UTC para LabVIEW 
+  if (modoInicio.value === 'siempre') {
+    formData.value.Programacion.Inicio = '1904-01-01T00:00:00.000Z';
+  } else {
+    formData.value.Programacion.Inicio = toUTCDatetime(formData.value.Programacion.Inicio);
+  }
+
+  if (modoFin.value === 'infinito') {
+    formData.value.Programacion.Fin = '2999-01-01T00:00:00.000Z';
+  } else {
+    formData.value.Programacion.Fin = toUTCDatetime(formData.value.Programacion.Fin);
+  }
+
+  // 2. Reconstruir Canales, ELIMINADA las datas se cogen de Gestor.Datas
+  //formData.value.Data = modoData.value === 'todos' ? '*' : canalesSeleccionados.value.join(', ');
+
+  // 3. Reconstruir Intervalos multiplicando a segundos
+  formData.value.Programacion.Intervalos = intervalosUI.value.map(i => {
+    if (i.unidad === 'horas') return i.valor * 3600;
+    if (i.unidad === 'minutos') return i.valor * 60;
+    return i.valor; // segundos
+  });
+
+  // 4. Reconstruir Procesados (GestiÃ³n de comodÃ­n '*')
+  if (procesadosUI.value.length === 0) {
+    formData.value.Procesado = [{ Nombre: '*', Config: '' }];
+  } else {
+    formData.value.Procesado = procesadosUI.value.map(p => ({
+      Nombre: p.Nombre,
+      Config: p.isCustom ? p.Config : ''
+    }));
+  }
+
+  if (formData.value.Trigger.Tipo === 'Timed') {
+    formData.value.Trigger.Niveles = [];
+  }
+
+  const payload = JSON.parse(JSON.stringify(formData.value));
+
+  try {
+    await measuresStore.guardarMedida(payload);
+    closePanel();
+  } catch (error) {
+    console.error("Error al guardar la medida en la vista:", error);
+  }
+};
+
+const handleEliminar = async (medida: MedidaItem) => {
+  const confirmacion = confirm(`Â¿EstÃ¡s seguro de que deseas eliminar permanentemente la medida "${medida.Nombre}" del hardware?`);
+  if (!confirmacion) return;
+  const payloadBorrado = { Nombre: medida.Nombre };
+  try {
+    await measuresStore.guardarMedida(payloadBorrado);
+  } catch (error) {
+    console.error("Error al eliminar la medida:", error);
+  }
+};
+</script>
+
+<template>
+  <div class="app-container">
+    <main class="main-content" :class="{ 'main-content--shifted': isPanelOpen }">
+      <header class="page-header">
+        <div class="header-titles">
+          <h1 class="page-title">Programador de Medidas</h1>
+          <p class="page-subtitle">GestiÃ³n de adquisiciones autÃ³nomas (Gestor.Medidas)</p>
+        </div>
+        <button @click="openCreatePanel" class="btn-primary" :disabled="measuresStore.loading">
+          Nueva Medida
+        </button>
+      </header>
+
+      <div class="cards-container">
+        <div v-if="measuresStore.loading && !isPanelOpen" class="loading-msg">Cargando medidas...</div>
+        <div v-else-if="measuresStore.listaMedidas.length === 0" class="empty-msg">No hay medidas programadas.</div>
+        <div v-else class="measures-grid">
+          <MeasureCard v-for="medida in measuresStore.listaMedidas" :key="medida.Nombre" :medida="medida"
+            @edit="openEditPanel" @delete="handleEliminar" />
+        </div>
+      </div>
+    </main>
+
+    <aside class="side-panel" :class="isPanelOpen ? 'side-panel--open' : 'side-panel--closed'">
+      <div class="panel-header">
+        <h2 class="panel-title">{{ isEditing ? 'Editar Medida' : 'Crear Nueva Medida' }}</h2>
+        <button @click="closePanel" class="btn-icon">âœ•</button>
+      </div>
+
+      <div class="panel-body">
+
+        <!-- SECCIÃ“N 1: IDENTIFICACIÃ“N -->
+        <div class="form-section">
+          <div class="form-group">
+            <label class="form-label">Nombre de la Medida</label>
+            <input v-model="formData.Nombre" type="text" class="form-input" :disabled="isEditing"
+              placeholder="Ej. Ensayo_01" />
+          </div>
+
+          <div class="form-group-inline mt-2">
+            <label class="form-label mb-0">Estado Inicial:</label>
+            <div class="toggle-wrapper">
+              <input type="checkbox" id="activo-toggle" v-model="formData.Activo" class="toggle-checkbox" />
+              <label for="activo-toggle" class="toggle-label"></label>
+            </div>
+            <span class="toggle-text">{{ formData.Activo ? 'Activa' : 'Inactiva' }}</span>
+          </div>
+
+          <!-- Selector de conjunto de Datos (Gestor.Datas) -->
+          <div class="form-group mt-2">
+            <label class="form-label">Datos</label>
+            <select v-model="formData.Data" class="form-select">
+              <option value="*">Todos los canales (*)</option>
+              <option v-for="grupo in measuresStore.listaDatas" :key="grupo" :value="grupo">
+                Conjunto: {{ grupo }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- SECCIÃ“N 2: CAPTURA -->
+        <div class="form-section">
+          <h3 class="section-title">ParÃ¡metros de Captura</h3>
+          <div class="grid-2-cols">
+            <div class="form-group">
+              <label class="form-label">DuraciÃ³n (s)</label>
+              <input v-model.number="formData.Captura.Duracion" type="number" class="form-input" min="1" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Bloques</label>
+              <input v-model.number="formData.Captura.Bloques" type="number" class="form-input" min="1" />
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- SECCIÃ“N 3: PROGRAMACIÃ“N -->
+        <div class="form-section">
+          <h3 class="section-title">ProgramaciÃ³n Temporal</h3>
+          <div class="form-group">
+            <label class="form-label">Periodicidad</label>
+            <select v-model="formData.Programacion.Periodicidad" class="form-select">
+              <option value="Unico">Ãšnico (1 sola vez)</option>
+              <option value="Continuo">Continuo (Bucle infinito)</option>
+              <option value="Fija">Fija</option>
+              <option value="Hora">Cada Hora</option>
+              <option value="DÃ­a">Diario</option>
+              <option value="Semana">Semanal</option>
+              <option value="Mes">Mensual</option>
+              <option value="AÃ±o">Anual</option>
+            </select>
+          </div>
+
+          <!-- Intervalos DinÃ¡micos -->
+          <div v-if="['Fija', 'Hora', 'DÃ­a', 'Semana', 'Mes', 'AÃ±o'].includes(formData.Programacion.Periodicidad)"
+            class="form-group">
+            <label class="form-label">Intervalos de EjecuciÃ³n</label>
+            <div v-for="(intv, idx) in intervalosUI" :key="idx" class="list-item mt-2">
+              <input v-model.number="intv.valor" type="number" min="0" class="form-input list-input-sm" />
+              <select v-model="intv.unidad" class="form-select list-input">
+                <option value="segundos">Segundos</option>
+                <option value="minutos">Minutos</option>
+                <option value="horas">Horas</option>
+              </select>
+              <button @click="intervalosUI.splice(idx, 1)" type="button" class="btn-icon text-danger">âœ•</button>
+            </div>
+            <button @click="intervalosUI.push({ valor: 1, unidad: 'minutos' })" type="button"
+              class="btn-text btn-text--edit mt-2">+ AÃ±adir Intervalo</button>
+          </div>
+
+          <div class="form-group mt-2">
+            <label class="form-label">Fecha de Inicio</label>
+            <div class="segmented-control mb-2">
+              <button type="button" :class="{ active: modoInicio === 'siempre' }"
+                @click="modoInicio = 'siempre'">Inmediato (Siempre)</button>
+              <button type="button" :class="{ active: modoInicio === 'fecha' }" @click="modoInicio = 'fecha'">Fecha
+                EspecÃ­fica</button>
+            </div>
+            <input v-if="modoInicio === 'fecha'" v-model="formData.Programacion.Inicio" type="datetime-local"
+              class="form-input" />
+          </div>
+
+          <div class="form-group mt-2">
+            <label class="form-label">Fecha de Fin</label>
+            <div class="segmented-control mb-2">
+              <button type="button" :class="{ active: modoFin === 'infinito' }" @click="modoFin = 'infinito'">Sin Fin
+                (Infinito)</button>
+              <button type="button" :class="{ active: modoFin === 'fecha' }" @click="modoFin = 'fecha'">Fecha
+                EspecÃ­fica</button>
+            </div>
+            <input v-if="modoFin === 'fecha'" v-model="formData.Programacion.Fin" type="datetime-local"
+              class="form-input" />
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- SECCIÃ“N 4: DISPARO -->
+        <div class="form-section">
+          <h3 class="section-title">Disparo (Trigger)</h3>
+          <div class="grid-2-cols">
+            <div class="form-group">
+              <label class="form-label">Tipo de Trigger</label>
+              <select v-model="formData.Trigger.Tipo" class="form-select">
+                <option value="Timed">Por Tiempo (Timed)</option>
+                <option value="Level">Por Nivel (Level)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prebuffer (Segundos)</label>
+              <input v-model.number="formData.Prebuffer" type="number" class="form-input" min="0" />
+            </div>
+          </div>
+
+          <div v-if="formData.Trigger.Tipo === 'Level'" class="dynamic-list-container">
+            <div class="list-header">
+              <label class="form-label">Condiciones de Nivel</label>
+              <button @click="addNivel" type="button" class="btn-text btn-text--edit">+ AÃ±adir</button>
+            </div>
+            <div v-for="(nivel, idx) in formData.Trigger.Niveles" :key="idx" class="list-item">
+              <input v-model="nivel.Canal" type="text" class="form-input list-input"
+                placeholder="Canal (Ej. Acc-A.Z)" />
+              <input v-model.number="nivel.Umbral" type="number" step="0.1" class="form-input list-input-sm"
+                placeholder="Umbral" />
+              <button @click="removeNivel(idx)" type="button" class="btn-icon text-danger">âœ•</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- SECCIÃ“N 5: PROCESADOS -->
+        <div class="form-section">
+          <div class="list-header">
+            <h3 class="section-title">Procesados Post-Captura</h3>
+          </div>
+
+          <div v-if="procesadosUI.length === 0" class="empty-proc-msg">
+            Se ejecutarÃ¡n <strong>Todos los procesados por defecto (*)</strong>.<br>AÃ±ade uno para elegir especÃ­ficos.
+          </div>
+
+          <div v-for="(proc, idx) in procesadosUI" :key="idx" class="proc-box">
+            <div class="proc-header">
+              <select v-model="proc.Nombre" class="form-select list-input-sm">
+                <option disabled value="">Elige procesado...</option>
+                <option v-for="op in opcionesProcesado" :key="op" :value="op">{{ op }}</option>
+              </select>
+              <button @click="procesadosUI.splice(idx, 1)" type="button" class="btn-icon text-danger">âœ•</button>
+            </div>
+            <label class="checkbox-label mt-2">
+              <input type="checkbox" v-model="proc.isCustom" /> Personalizar ConfiguraciÃ³n
+            </label>
+            <input v-if="proc.isCustom" v-model="proc.Config" type="text" class="form-input mt-2"
+              placeholder='Ej. {"Res F": 0.1}' />
+          </div>
+          <button @click="procesadosUI.push({ Nombre: '', Config: '', isCustom: false })" type="button"
+            class="btn-text btn-text--edit mt-2">+ AÃ±adir Procesado</button>
+        </div>
+
+      </div>
+
+      <div class="panel-footer">
+        <button @click="closePanel" class="btn-secondary">Cancelar</button>
+        <button @click="guardarFormulario" class="btn-primary" :disabled="measuresStore.loading">
+          Guardar Cambios
+        </button>
+      </div>
+    </aside>
+
+    <div v-if="isPanelOpen" @click="closePanel" class="overlay"></div>
+  </div>
+</template>
+
+<style scoped>
+/* ESTILOS PREVIOS INTACTOS */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--color-bg-main);
+  font-family: var(--font-family);
+  color: var(--color-text-primary);
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  padding: 6rem 2rem 2rem 2rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  transition: margin-right var(--transition-speed) ease-in-out;
+}
+
+.main-content--shifted {
+  margin-right: 26rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--color-text-title);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0.25rem 0 0 0;
+}
+
+.cards-container {
+  width: 100%;
+}
+
+.measures-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+.loading-msg,
+.empty-msg {
+  padding: 3rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-white);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-primary);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.btn-secondary {
+  flex: 1;
+  padding: 0.625rem;
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-input-border);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-bg-main);
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.btn-text--edit {
+  color: var(--color-primary);
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 9999px;
+  transition: background-color 0.2s, color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  background-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.text-danger {
+  color: var(--color-danger);
+}
+
+.side-panel {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 28rem;
+  background-color: var(--color-bg-white);
+  box-shadow: -10px 0 15px -3px rgba(0, 0, 0, 0.1);
+  border-left: 1px solid var(--color-border);
+  transform: translateX(100%);
+  transition: transform var(--transition-speed) ease-in-out;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+.side-panel--open {
+  transform: translateX(0);
+}
+
+.panel-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--color-bg-main);
+}
+
+.panel-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.panel-footer {
+  padding: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-bg-main);
+  display: flex;
+  gap: 0.75rem;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-title);
+  margin: 0 0 0.25rem 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.mb-0 {
+  margin-bottom: 0;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.mb-2 {
+  margin-bottom: 0.5rem;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-input-border);
+  background-color: var(--color-bg-white);
+  color: var(--color-text-primary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-input:disabled {
+  background-color: var(--color-bg-main);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+.grid-2-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 0;
+}
+
+.dynamic-list-container {
+  background-color: var(--color-bg-main);
+  border: 1px dashed var(--color-input-border);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.list-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.list-input {
+  flex: 2;
+}
+
+.list-input-sm {
+  flex: 1;
+}
+
+.toggle-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 3rem;
+  height: 1.5rem;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.toggle-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  z-index: 10;
+  margin: 0;
+}
+
+.toggle-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-input-border);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.toggle-label::before {
+  content: "";
+  position: absolute;
+  height: 1.25rem;
+  width: 1.25rem;
+  left: 0.125rem;
+  bottom: 0.125rem;
+  background-color: var(--color-bg-white);
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-checkbox:checked+.toggle-label {
+  background-color: var(--color-primary);
+}
+
+.toggle-checkbox:checked+.toggle-label::before {
+  transform: translateX(1.5rem);
+}
+
+.toggle-text {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* NUEVOS ESTILOS PARA LOS CONTROLES SEGMENTADOS Y CHECKBOXES */
+.segmented-control {
+  display: flex;
+  background-color: var(--color-bg-main);
+  border-radius: 6px;
+  border: 1px solid var(--color-input-border);
+  overflow: hidden;
+}
+
+.segmented-control button {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.segmented-control button.active {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  background: var(--color-bg-white);
+}
+
+.checkbox-label {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--color-text-primary);
+}
+
+.empty-proc-msg {
+  background-color: #f0fdf4;
+  color: #166534;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  border: 1px solid #bbf7d0;
+  text-align: center;
+}
+
+.proc-box {
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 10px;
+  background-color: var(--color-bg-white);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.proc-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+</style>
+App.vue:
+<script setup lang="ts">
+import Logo from '@/components/Logo.vue'
+</script>
+
+
+
+<template>
+  <header class="logo-container">
+    <Logo />
+  </header>
+
+  <main class="main-content">
+    <router-view />
+  </main>
+</template>
+
+<style scoped>
+.logo-container {
+  position: absolute; /* TambiÃ©n puedes usar 'fixed' si quieres que no se mueva al hacer scroll */
+  top: 20px;
+  left: 20px;
+  z-index: 1000; /* Asegura que el logo siempre quede por encima del contenido */
+}
+
+.main-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  width: 100%;
+  padding: 20px; /* Margen de seguridad interno para pantallas pequeÃ±as */
+  box-sizing: border-box;
+}
+</style>
+main.ts:
+import './assets/main.css'
+
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+
+import App from './App.vue'
+import router from './router'
+
+const app = createApp(App)
+
+app.use(createPinia())
+app.use(router)
+
+app.mount('#app')
+

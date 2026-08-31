@@ -21,7 +21,7 @@
   --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
 }
 
-/* ☀️ TEMA CLARO (Variables de Vue + TUS VARIABLES) */
+/* TEMA CLARO (Variables de Vue + TUS VARIABLES) */
 :root {
   /* Por defecto de Vue */
   --color-background: var(--vt-c-white);
@@ -52,7 +52,7 @@
   --transition-speed: 0.3s;
 }
 
-/* 🌙 TEMA OSCURO (Reemplazamos el @media por html.dark para control manual) */
+/* TEMA OSCURO (Reemplazamos el @media por html.dark para control manual) */
 html.dark {
   /* Por defecto de Vue */
   --color-background: var(--vt-c-black);
