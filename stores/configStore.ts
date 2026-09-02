@@ -55,7 +55,9 @@ export const useConfigStore = defineStore('config', {
           delete payload.Gestor.Medidas;
         }
 
-        await api.post('/remo/Config', payload, { withCredentials: true })
+        //comentamos la línea de codigo que envia la configuracion al dispositivo ReMo y en su defecto hacemos que la imprima como un log para poder probar la configuracion sin comprometer el dispositivo ReMo
+        console.log(payload)
+        //await api.post('/remo/Config', payload, { withCredentials: true })
         this.successMsg = "Configuración aplicada correctamente. El dispositivo aplicará los cambios."
         
         // Actualizamos el original para que el nuevo borrador parta de aquí
