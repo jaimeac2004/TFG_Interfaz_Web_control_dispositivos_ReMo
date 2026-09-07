@@ -2,9 +2,15 @@ import { defineStore } from 'pinia'
 import { api } from '@/api/axios'
 import type { FullConfig } from '@/types/config'
 
+// --- PLANTILLAS VACÍAS (ESQUELETOS) ---
+// Representan un procesado "en blanco". Si el payload coincide con esto, se purgará.
+const templateFFT = { Canales: [], Config: { "Res F": 0.1, "Inc F": 0, Ventana: "Hanning", Rango: { Min: 0, Max: -1 }, dB: false, Detector: { Guarda: 0.5, Promedio: 1.5, Umbral: 4.0 } } };
+const templateOMA = { OMAs: [], Config: { Frecuencia: { Maxima: 10, Tolerancia: 0.05, Estables: 0 }, SSI: { p: 30, nb: 30, step: 1, ordmax: 50, ordmin: 1 }, "Hard Criteria": { conj: true, xi_max: 0.1, mpc_lim: 0.7, mpd_lim: 0.3, cov_max: 0.2 }, "Soft Criteria": { err_fn: 0.01, err_xi: 0.05, err_phi: 0.03 } } };
+const templateFRF = { Canales: [], Config: { Excitacion: { Canal: "", Masa: 1.0 }, "Res F": 0.1, "Inc F": 0, Ventana: "Hanning", Promedio: "Lineal", Frecuencia: { Minima: 1, Maxima: 10 }, EMA: { Modos: 5, dr_umbral: 0.1 } } };
+
 interface ConfigState {
   originalConfig: FullConfig | null
-  draftConfig: FullConfig | null // Estado intermedio (Borrador)
+  draftConfig: FullConfig | null
   loading: boolean
   error: string
   successMsg: string
@@ -23,10 +29,18 @@ export const useConfigStore = defineStore('config', {
     async fetchConfig() {
       this.loading = true; this.error = ''; this.successMsg = '';
       try {
-        // Pedimos toda la configuración de golpe
         const res = await api.get<FullConfig>('/remo/Config', { withCredentials: true })
-        this.originalConfig = JSON.parse(JSON.stringify(res.data))
-        this.draftConfig = JSON.parse(JSON.stringify(res.data))
+        const data = res.data;
+        
+        // Guardamos cómo llegó exactamente para futuras comparaciones
+        this.originalConfig = JSON.parse(JSON.stringify(data));
+        
+        // HIDRATACIÓN: Si un procesado viene vacío o no existe, inyectamos el esqueleto para la UI
+        if (!data.FFT || Object.keys(data.FFT).length === 0) data.FFT = JSON.parse(JSON.stringify(templateFFT));
+        if (!data.OMA || Object.keys(data.OMA).length === 0) data.OMA = JSON.parse(JSON.stringify(templateOMA));
+        if (!data.FRF || Object.keys(data.FRF).length === 0) data.FRF = JSON.parse(JSON.stringify(templateFRF));
+
+        this.draftConfig = data;
       } catch (err) {
         console.error("Error al obtener la configuración:", err)
         this.error = "No se pudo cargar la configuración del dispositivo."
@@ -35,11 +49,18 @@ export const useConfigStore = defineStore('config', {
       }
     },
 
-    // Restaura el borrador al último estado guardado
     cancelarCambios() {
       if (this.originalConfig) {
-        this.draftConfig = JSON.parse(JSON.stringify(this.originalConfig))
+        this.fetchConfig(); // Volvemos a hidratar correctamente
       }
+    },
+
+    // Permite a la UI resetear un procesado a su estado de fábrica (blanco)
+    resetProcesado(tipo: 'FFT' | 'OMA' | 'FRF') {
+      if (!this.draftConfig) return;
+      if (tipo === 'FFT') this.draftConfig.FFT = JSON.parse(JSON.stringify(templateFFT));
+      if (tipo === 'OMA') this.draftConfig.OMA = JSON.parse(JSON.stringify(templateOMA));
+      if (tipo === 'FRF') this.draftConfig.FRF = JSON.parse(JSON.stringify(templateFRF));
     },
 
     async saveConfig() {
@@ -49,18 +70,29 @@ export const useConfigStore = defineStore('config', {
       try {
         const payload = JSON.parse(JSON.stringify(this.draftConfig));
         
-        // PROTECCIÓN CRÍTICA: Eliminamos Gestor.Medidas para que el POST 
-        // no sobreescriba lo que maneja MeasuresView.vue[cite: 10]
         if (payload.Gestor && payload.Gestor.Medidas) {
           delete payload.Gestor.Medidas;
         }
 
-        //comentamos la línea de codigo que envia la configuracion al dispositivo ReMo y en su defecto hacemos que la imprima como un log para poder probar la configuracion sin comprometer el dispositivo ReMo
-        console.log(payload)
-        //await api.post('/remo/Config', payload, { withCredentials: true })
-        this.successMsg = "Configuración aplicada correctamente. El dispositivo aplicará los cambios."
+        // PURGA: Si la sección coincide con el esqueleto (está en blanco)
+        // se enviará ausente o vacía según llegó originalmente[cite: 9]
+        if (JSON.stringify(payload.FFT) === JSON.stringify(templateFFT)) {
+          if (!this.originalConfig?.FFT || Object.keys(this.originalConfig.FFT).length === 0) delete payload.FFT;
+          else payload.FFT = {};
+        }
+        if (JSON.stringify(payload.OMA) === JSON.stringify(templateOMA)) {
+          if (!this.originalConfig?.OMA || Object.keys(this.originalConfig.OMA).length === 0) delete payload.OMA;
+          else payload.OMA = {};
+        }
+        if (JSON.stringify(payload.FRF) === JSON.stringify(templateFRF)) {
+          if (!this.originalConfig?.FRF || Object.keys(this.originalConfig.FRF).length === 0) delete payload.FRF;
+          else payload.FRF = {};
+        }
+
+        console.log(payload); // Tu chivato de depuración
+        // await api.post('/remo/Config', payload, { withCredentials: true })
+        this.successMsg = "Configuración procesada y depurada correctamente."
         
-        // Actualizamos el original para que el nuevo borrador parta de aquí
         this.originalConfig = JSON.parse(JSON.stringify(payload))
       } catch (err) {
         console.error("Error al guardar la configuración:", err)

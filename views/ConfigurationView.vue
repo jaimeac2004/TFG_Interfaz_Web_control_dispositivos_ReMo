@@ -13,6 +13,7 @@ const showConfirmModal = ref(false);
 
 onMounted(() => {
   configStore.fetchConfig();
+  auth.fetchDashboardData();
 });
 
 // --- COMPUTADOS ---
@@ -49,6 +50,9 @@ const removeATH = (idx: number) => configStore.draftConfig!.ATHAD.ATHs.splice(id
 
 const addAD = () => configStore.draftConfig!.ATHAD.ADs.push({ Sensor: -1, Ganancia: 1 });
 const removeAD = (idx: number) => configStore.draftConfig!.ATHAD.ADs.splice(idx, 1);
+
+const addCalibracion = () => configStore.draftConfig!.ATHAD.Calibracion.push({ Sensor: -1, Gains: [1.0], Offsets: [0.0] });
+const removeCalibracion = (idx: number) => configStore.draftConfig!.ATHAD.Calibracion.splice(idx, 1);
 
 // --- OPERACIONES DE DATAS (Añadir/Eliminar Conjuntos) ---
 const addDataset = () => configStore.draftConfig!.Gestor.Datas.push({ Nombre: 'Nuevo_Conjunto', Canales: [], Estados: [] });
@@ -232,6 +236,29 @@ const addStringToArray = (lista: string[], event: Event) => {
                 </table>
               </div>
             </div>
+            <hr class="divider mt-4" />
+            <div class="flex-between mt-4 mb-2">
+              <h2 class="section-title mb-0">Calibración Hardware</h2>
+              <button @click="addCalibracion" class="btn-text btn-text--edit">+ Añadir Calibración</button>
+            </div>
+            <table class="data-table">
+              <thead><tr><th>Sensor</th><th>Gains (JSON Array)</th><th>Offsets (JSON Array)</th><th>Acción</th></tr></thead>
+              <tbody>
+                <tr v-for="(cal, idx) in configStore.draftConfig.ATHAD.Calibracion" :key="idx">
+                  <td class="text-center font-bold">
+                    <span v-if="cal.Sensor === -1" class="badge badge-default">Por Defecto</span>
+                    <input v-else v-model.number="cal.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                  </td>
+                  <td>
+                    <input :value="JSON.stringify(cal.Gains)" @change="e => cal.Gains = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                  </td>
+                  <td>
+                    <input :value="JSON.stringify(cal.Offsets)" @change="e => cal.Offsets = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                  </td>
+                  <td class="text-center"><button @click="removeCalibracion(idx)" class="btn-icon text-danger">✕</button></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <!-- SECCIÓN 2: DATAS (Gestor.Datas) -->
@@ -298,7 +325,15 @@ const addStringToArray = (lista: string[], event: Event) => {
             </div>
 
             <div class="proc-content">
-              <h2 class="section-title">Configuración: {{ activeProcTab }}</h2>
+              <div class="flex-between" style="border-bottom: 2px solid var(--color-border); margin-bottom: 20px;">
+                <h2 class="section-title" style="border-bottom: none; margin-bottom: 0; padding-bottom: 8px;">Configuración: {{ activeProcTab }}</h2>
+                <button v-if="['FFT', 'OMA', 'FRF'].includes(activeProcTab)" 
+                        @click="configStore.resetProcesado(activeProcTab as any)" 
+                        class="btn-text text-danger mb-2" 
+                        title="Vacia este procesado para que se elimine de la configuración">
+                  Borrar configuración actual
+                </button>
+              </div>
               
               <!-- Canales Globales (Para todos excepto OMA) -->
               <div v-if="activeProcTab !== 'OMA' && configStore.draftConfig[activeProcTab]" class="form-group mb-4">
@@ -346,6 +381,23 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                     </select>
                   </div>
+                  <!-- Nuevos campos -->
+                  <div class="form-group" v-if="configStore.draftConfig.FFT.Config.Rango"><label class="form-label">Rango Min</label><input v-model.number="configStore.draftConfig.FFT.Config.Rango.Min" type="number" class="form-input" /></div>
+                  <div class="form-group" v-if="configStore.draftConfig.FFT.Config.Rango"><label class="form-label">Rango Max</label><input v-model.number="configStore.draftConfig.FFT.Config.Rango.Max" type="number" class="form-input" /></div>
+                  <div class="form-group flex-between mt-2">
+                    <label class="form-label mb-0">Escala Logarítmica (dB)</label>
+                    <div class="toggle-wrapper">
+                      <input type="checkbox" id="fft-db" v-model="configStore.draftConfig.FFT.Config.dB" class="toggle-checkbox" />
+                      <label for="fft-db" class="toggle-label"></label>
+                    </div>
+                  </div>
+                </div>
+                
+                <h5 class="mt-4">Parámetros del Detector</h5>
+                <div class="grid-3-cols mt-2" v-if="configStore.draftConfig.FFT.Config.Detector">
+                  <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="configStore.draftConfig.FFT.Config.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="configStore.draftConfig.FFT.Config.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="configStore.draftConfig.FFT.Config.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
                 </div>
               </div>
 
@@ -379,10 +431,81 @@ const addStringToArray = (lista: string[], event: Event) => {
                 </div>
                 <button @click="configStore.draftConfig!.OMA.OMAs.push({ Nombre: 'Nuevo', Canales: ['*'] })" class="btn-text btn-text--edit mt-2">+ Añadir Grupo OMA</button>
 
-                <h4 class="mt-4">Configuración OMA SSI</h4>
+                <h4 class="mt-4">Configuración OMA SSI (Frecuencia)</h4>
+                <div class="grid-3-cols mt-2">
+                  <div class="form-group"><label class="form-label">Frec. Máxima</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Estables</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Estables" type="number" class="form-input" /></div>
+                </div>
+
+                <h5 class="mt-4">Parámetros SSI</h5>
+                <div class="grid-3-cols mt-2" v-if="configStore.draftConfig.OMA.Config.SSI">
+                  <div class="form-group"><label class="form-label">p</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.p" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">nb</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.nb" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">step</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.step" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.ordmax" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.ordmin" type="number" class="form-input" /></div>
+                </div>
+
+                <div class="grid-2-cols mt-4">
+                  <div>
+                    <h5>Hard Criteria</h5>
+                    <div class="grid-2-cols mt-2" v-if="configStore.draftConfig.OMA.Config['Hard Criteria']">
+                      <div class="form-group flex-between">
+                        <label class="form-label mb-0">Conj</label>
+                        <div class="toggle-wrapper">
+                          <input type="checkbox" id="oma-conj" v-model="configStore.draftConfig.OMA.Config['Hard Criteria'].conj" class="toggle-checkbox" />
+                          <label for="oma-conj" class="toggle-label"></label>
+                        </div>
+                      </div>
+                      <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
+                    </div>
+                  </div>
+                  <div>
+                    <h5>Soft Criteria</h5>
+                    <div class="form-group mt-2" v-if="configStore.draftConfig.OMA.Config['Soft Criteria']">
+                      <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="configStore.draftConfig.OMA.Config['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="configStore.draftConfig.OMA.Config['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="configStore.draftConfig.OMA.Config['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 👇 AÑADIR CONFIGURACIÓN FRF AQUÍ 👇 -->
+              <div v-if="activeProcTab === 'FRF' && configStore.draftConfig.FRF?.Config" class="config-box">
+                <h4>Configuración FRF</h4>
                 <div class="grid-2-cols mt-2">
-                  <div class="form-group"><label class="form-label">Frec. Max</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">SSI p</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.p" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Excitación (Canal)</label><input v-model="configStore.draftConfig.FRF.Config.Excitacion.Canal" type="text" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Excitación (Masa)</label><input v-model.number="configStore.draftConfig.FRF.Config.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
+                </div>
+                <div class="grid-3-cols mt-3">
+                  <div class="form-group"><label class="form-label">Res F</label><input v-model.number="configStore.draftConfig.FRF.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="configStore.draftConfig.FRF.Config['Inc F']" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group">
+                    <label class="form-label">Ventana</label>
+                    <select v-model="configStore.draftConfig.FRF.Config.Ventana" class="form-select">
+                      <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-3-cols mt-3">
+                  <div class="form-group">
+                    <label class="form-label">Promedio</label>
+                    <select v-model="configStore.draftConfig.FRF.Config.Promedio" class="form-select">
+                      <option>Lineal</option><option>Exponencial</option>
+                    </select>
+                  </div>
+                  <div class="form-group"><label class="form-label">Frecuencia Mínima</label><input v-model.number="configStore.draftConfig.FRF.Config.Frecuencia.Minima" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Frecuencia Máxima</label><input v-model.number="configStore.draftConfig.FRF.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
+                </div>
+                <h5 class="mt-4">Análisis Modal Experimental (EMA)</h5>
+                <div class="grid-2-cols mt-2">
+                  <div class="form-group"><label class="form-label">Modos</label><input v-model.number="configStore.draftConfig.FRF.Config.EMA.Modos" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="configStore.draftConfig.FRF.Config.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
                 </div>
               </div>
 
@@ -397,6 +520,22 @@ const addStringToArray = (lista: string[], event: Event) => {
               <div class="form-group"><label class="form-label">Token de Acceso</label><input v-model="configStore.draftConfig.InfluxDB.DB.Token" type="password" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Organization ID</label><input v-model="configStore.draftConfig.InfluxDB.DB.OrgID" type="text" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Bucket</label><input v-model="configStore.draftConfig.InfluxDB.DB.Bucket" type="text" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Reintentos de Conexión</label><input v-model.number="configStore.draftConfig.InfluxDB.Reintentos" type="number" class="form-input" /></div>
+            </div>
+
+            <hr class="divider mt-4 mb-4" />
+            <h2 class="section-title">Enrutado de Loggers</h2>
+            <p class="text-muted">Define bajo qué nombre de "Medida" de InfluxDB se guardan los datos procesados en la nube.</p>
+            <div class="config-box" v-if="configStore.draftConfig.InfluxDB.Loggers">
+              <div class="grid-3-cols">
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.DataSet"><label class="form-label">DataSet</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.DataSet.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.Data"><label class="form-label">Data</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.Data.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.TA"><label class="form-label">TA</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.TA.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.OMA"><label class="form-label">OMA</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.OMA.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.FFT"><label class="form-label">FFT (Base)</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.FFT.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.FFT"><label class="form-label">FFT (FA)</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.FFT['Medida FA']" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.FRF"><label class="form-label">FRF</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.FRF.Medida" type="text" class="form-input" /></div>
+              </div>
             </div>
           </div>
 
@@ -541,4 +680,13 @@ const addStringToArray = (lista: string[], event: Event) => {
 .pb-3 { padding-bottom: 0.75rem; }
 .text-muted { color: var(--color-text-secondary); font-size: 0.9rem; }
 .data-card { border: 1px solid var(--color-border); padding: 15px; border-radius: 6px; background-color: var(--color-bg-main); }
+
+/* ESTILOS PARA LOS TOGGLES (Interruptores) */
+.toggle-wrapper { position: relative; display: inline-block; width: 2.75rem; height: 1.5rem; vertical-align: middle; user-select: none; }
+.toggle-checkbox { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; z-index: 10; margin: 0; }
+.toggle-label { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-input-border); border-radius: 9999px; cursor: pointer; transition: background-color 0.2s; }
+.toggle-label::before { content: ""; position: absolute; height: 1.15rem; width: 1.15rem; left: 0.15rem; bottom: 0.175rem; background-color: var(--color-bg-white); border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.toggle-checkbox:checked + .toggle-label { background-color: var(--color-primary); }
+.toggle-checkbox:checked + .toggle-label::before { transform: translateX(1.25rem); }
+
 </style>
