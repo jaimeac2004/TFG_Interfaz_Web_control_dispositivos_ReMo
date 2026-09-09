@@ -69,6 +69,10 @@ export const useConfigStore = defineStore('config', {
 
       try {
         const payload = JSON.parse(JSON.stringify(this.draftConfig));
+
+        if (payload.Gestor && Array.isArray(payload.Gestor.Nodos)) {
+          payload.Gestor.Nodos.sort((a: any, b: any) => a.Sensor - b.Sensor);
+        }
         
         if (payload.Gestor && payload.Gestor.Medidas) {
           delete payload.Gestor.Medidas;
@@ -90,7 +94,8 @@ export const useConfigStore = defineStore('config', {
         }
 
         //Como aun estamos probando, no enviamos el JSON al dispositivo ReMo y lo imprimimos en consola para comprobar que se genere bien
-        console.log(payload);
+        //console.log(payload);
+        //Una vez que ya funciona se comenta el comando que imprime en consola
         await api.post('/remo/Config', payload, { withCredentials: true })
         this.successMsg = "Configuración procesada y depurada correctamente."
         

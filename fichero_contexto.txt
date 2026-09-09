@@ -951,6 +951,10 @@ export const useConfigStore = defineStore('config', {
 
       try {
         const payload = JSON.parse(JSON.stringify(this.draftConfig));
+
+        if (payload.Gestor && Array.isArray(payload.Gestor.Nodos)) {
+          payload.Gestor.Nodos.sort((a: any, b: any) => a.Sensor - b.Sensor);
+        }
         
         if (payload.Gestor && payload.Gestor.Medidas) {
           delete payload.Gestor.Medidas;
@@ -971,8 +975,10 @@ export const useConfigStore = defineStore('config', {
           else payload.FRF = {};
         }
 
-        console.log(payload); // Tu chivato de depuraciÃ³n
-        // await api.post('/remo/Config', payload, { withCredentials: true })
+        //Como aun estamos probando, no enviamos el JSON al dispositivo ReMo y lo imprimimos en consola para comprobar que se genere bien
+        //console.log(payload);
+        //Una vez que ya funciona se comenta el comando que imprime en consola
+        await api.post('/remo/Config', payload, { withCredentials: true })
         this.successMsg = "ConfiguraciÃ³n procesada y depurada correctamente."
         
         this.originalConfig = JSON.parse(JSON.stringify(payload))
@@ -1417,9 +1423,9 @@ const addStringToArray = (lista: string[], event: Event) => {
                   <thead><tr><th>Sensor</th><th>Rango</th><th>HPF</th><th></th></tr></thead>
                   <tbody>
                     <tr v-for="(ath, idx) in configStore.draftConfig.ATHAD.ATHs" :key="idx">
-                      <td class="text-center font-bold">
-                        <span v-if="ath.Sensor === -1" class="badge badge-default">Por Defecto</span>
-                        <input v-else v-model.number="ath.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                      <td class="text-center">
+                        <input v-model.number="ath.Sensor" type="number" class="form-input-sm" style="width: 60px;" title="Escribe -1 para configuraciÃ³n por defecto" />
+                        <div v-if="ath.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                       </td>
                       <td>
                         <select v-model="ath.Rango" class="form-select list-input-sm">
@@ -1441,9 +1447,9 @@ const addStringToArray = (lista: string[], event: Event) => {
                   <thead><tr><th>Sensor</th><th>Ganancia</th><th></th></tr></thead>
                   <tbody>
                     <tr v-for="(ad, idx) in configStore.draftConfig.ATHAD.ADs" :key="idx">
-                      <td class="text-center font-bold">
-                        <span v-if="ad.Sensor === -1" class="badge badge-default">Por Defecto</span>
-                        <input v-else v-model.number="ad.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                      <td class="text-center">
+                        <input v-model.number="ad.Sensor" type="number" class="form-input-sm" style="width: 60px;" title="Escribe -1 para configuraciÃ³n por defecto" />
+                        <div v-if="ad.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                       </td>
                       <td><input v-model.number="ad.Ganancia" type="number" class="form-input-sm" /></td>
                       <td class="text-center"><button @click="removeAD(idx)" class="btn-icon text-danger">âœ•</button></td>
@@ -1461,9 +1467,9 @@ const addStringToArray = (lista: string[], event: Event) => {
               <thead><tr><th>Sensor</th><th>Gains (JSON Array)</th><th>Offsets (JSON Array)</th><th>AcciÃ³n</th></tr></thead>
               <tbody>
                 <tr v-for="(cal, idx) in configStore.draftConfig.ATHAD.Calibracion" :key="idx">
-                  <td class="text-center font-bold">
-                    <span v-if="cal.Sensor === -1" class="badge badge-default">Por Defecto</span>
-                    <input v-else v-model.number="cal.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                  <td class="text-center">
+                    <input v-model.number="cal.Sensor" type="number" class="form-input-sm" style="width: 60px;" title="Escribe -1 para configuraciÃ³n por defecto" />
+                    <div v-if="cal.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                   </td>
                   <td>
                     <input :value="JSON.stringify(cal.Gains)" @change="e => cal.Gains = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
@@ -2136,6 +2142,35 @@ const closeProcModal = () => {
   editingProcIndex.value = null;
 };
 
+// --- UTILIDADES DE PROCESADO (GestiÃ³n del * y modos en el modal) ---
+const getProcMode = (canales: string[] | undefined) => {
+  if (!canales || canales.length === 0) return 'manual';
+  if (canales.length === 1 && canales[0] === '*') return 'todos';
+  if (canales.length === 1 && measuresStore.listaDatas.includes(canales[0])) return 'conjunto';
+  return 'manual';
+};
+
+const setProcMode = (mode: string, parent: any, key: string) => {
+  if (mode === 'todos') {
+    parent[key] = ['*'];
+  } else if (mode === 'conjunto') {
+    const firstData = measuresStore.listaDatas[0] || '';
+    parent[key] = [firstData];
+  } else {
+    parent[key] = [];
+  }
+};
+
+const addStringToArray = (lista: string[], event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  if (target && target.value) {
+    if (!lista.includes(target.value)) {
+      lista.push(target.value);
+    }
+    target.value = ''; // Resetea el desplegable
+  }
+};
+
 const getEmptyMeasure = (): MedidaItem => ({
   Nombre: '',
   Activo: true,
@@ -2568,7 +2603,7 @@ const handleEliminar = async (medida: MedidaItem) => {
 
     <div v-if="isPanelOpen" @click="closePanel" class="overlay"></div>
     <!-- MODAL DE CONFIGURACIÃ“N DE PROCESADO -->
-    <div v-if="isProcModalOpen && editingProcIndex !== null" class="overlay" style="z-index: 100;">
+    <div v-if="isProcModalOpen && editingProcIndex !== null" class="modal-overlay">
       <div class="modal-box" style="max-width: 650px; text-align: left;">
         <div class="panel-header" style="margin: -30px -30px 20px -30px; border-radius: 12px 12px 0 0;">
           <h2 class="panel-title">ConfiguraciÃ³n de: {{ procesadosUI[editingProcIndex].Nombre }}</h2>
@@ -2677,10 +2712,37 @@ const handleEliminar = async (medida: MedidaItem) => {
 
           <!-- DATA / TA -->
           <div v-else>
-            <div class="form-group">
-              <label class="form-label">Sobrescribir Canales (JSON Array string)</label>
-              <p class="form-hint mb-2">Escribe ["*"] para aplicar a todos, o dÃ©jalo en blanco para usar la configuraciÃ³n global.</p>
-              <textarea :value="JSON.stringify(tempProcConfig.Canales || [])" @change="e => tempProcConfig.Canales = JSON.parse((e.target as HTMLTextAreaElement).value)" class="form-input" rows="3"></textarea>
+            <div class="form-group mb-4">
+              <label class="form-label">Canales objetivo para {{ procesadosUI[editingProcIndex].Nombre }}</label>
+              
+              <!-- Selector Inteligente de Modo -->
+              <select :value="getProcMode(tempProcConfig.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, tempProcConfig, 'Canales')" class="form-select mb-2">
+                <option value="todos">Todos los Canales (*)</option>
+                <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
+                <option value="manual">SelecciÃ³n Manual de Canales</option>
+              </select>
+
+              <!-- Si eligen Conjunto -->
+              <div v-if="getProcMode(tempProcConfig.Canales) === 'conjunto'">
+                <select v-model="tempProcConfig.Canales[0]" class="form-select">
+                  <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">
+                    Usar grupo: {{ d }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Si eligen Manual -->
+              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" style="background: var(--color-bg-main); padding: 10px; border-radius: 6px; border: 1px dashed var(--color-input-border);">
+                <div class="tags-container mb-2">
+                  <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">
+                    {{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">âœ•</button>
+                  </span>
+                </div>
+                <select @change="addStringToArray(tempProcConfig.Canales, $event)" class="form-select">
+                  <option value="">+ AÃ±adir Canal al Procesado...</option>
+                  <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -3130,6 +3192,41 @@ const handleEliminar = async (medida: MedidaItem) => {
   gap: 10px;
   align-items: center;
 }
+
+/* MODAL DE CONFIGURACIÃ“N DE PROCESADOS */
+.modal-overlay { 
+  position: fixed; 
+  inset: 0; 
+  background-color: rgba(0, 0, 0, 0.5); /* Fondo oscuro semitransparente */
+  z-index: 100; /* Lo pone por encima de la barra lateral de ediciÃ³n */
+  display: flex; 
+  align-items: center; /* Lo centra verticalmente */
+  justify-content: center; /* Lo centra horizontalmente */
+  backdrop-filter: blur(2px); 
+}
+
+.modal-box { 
+  background-color: var(--color-bg-white); /* Fondo blanco (o gris oscuro en modo noche) */
+  padding: 30px; 
+  border-radius: 12px; 
+  width: 90%; 
+  max-width: 650px; 
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+  border: 1px solid var(--color-border); 
+}
+
+.modal-actions { 
+  display: flex; 
+  justify-content: flex-end; /* Alinea los botones a la derecha */
+  gap: 15px; 
+}
+
+/* ESTILOS PARA ETIQUETAS (TAGS) */
+.tags-container { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.badge-tag { background: var(--color-primary); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.tag-close { background: none; border: none; color: white; cursor: pointer; font-weight: bold; padding: 0; opacity: 0.8; transition: opacity 0.2s; }
+.tag-close:hover { opacity: 1; color: #fca5a5; }
+
 </style>
 App.vue:
 <script setup lang="ts">
