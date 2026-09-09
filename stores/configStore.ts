@@ -89,8 +89,9 @@ export const useConfigStore = defineStore('config', {
           else payload.FRF = {};
         }
 
-        console.log(payload); // Tu chivato de depuración
-        // await api.post('/remo/Config', payload, { withCredentials: true })
+        //Como aun estamos probando, no enviamos el JSON al dispositivo ReMo y lo imprimimos en consola para comprobar que se genere bien
+        console.log(payload);
+        await api.post('/remo/Config', payload, { withCredentials: true })
         this.successMsg = "Configuración procesada y depurada correctamente."
         
         this.originalConfig = JSON.parse(JSON.stringify(payload))

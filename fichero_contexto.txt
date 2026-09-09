@@ -884,9 +884,15 @@ import { defineStore } from 'pinia'
 import { api } from '@/api/axios'
 import type { FullConfig } from '@/types/config'
 
+// --- PLANTILLAS VACÃAS (ESQUELETOS) ---
+// Representan un procesado "en blanco". Si el payload coincide con esto, se purgarÃ¡.
+const templateFFT = { Canales: [], Config: { "Res F": 0.1, "Inc F": 0, Ventana: "Hanning", Rango: { Min: 0, Max: -1 }, dB: false, Detector: { Guarda: 0.5, Promedio: 1.5, Umbral: 4.0 } } };
+const templateOMA = { OMAs: [], Config: { Frecuencia: { Maxima: 10, Tolerancia: 0.05, Estables: 0 }, SSI: { p: 30, nb: 30, step: 1, ordmax: 50, ordmin: 1 }, "Hard Criteria": { conj: true, xi_max: 0.1, mpc_lim: 0.7, mpd_lim: 0.3, cov_max: 0.2 }, "Soft Criteria": { err_fn: 0.01, err_xi: 0.05, err_phi: 0.03 } } };
+const templateFRF = { Canales: [], Config: { Excitacion: { Canal: "", Masa: 1.0 }, "Res F": 0.1, "Inc F": 0, Ventana: "Hanning", Promedio: "Lineal", Frecuencia: { Minima: 1, Maxima: 10 }, EMA: { Modos: 5, dr_umbral: 0.1 } } };
+
 interface ConfigState {
   originalConfig: FullConfig | null
-  draftConfig: FullConfig | null // Estado intermedio (Borrador)
+  draftConfig: FullConfig | null
   loading: boolean
   error: string
   successMsg: string
@@ -905,10 +911,18 @@ export const useConfigStore = defineStore('config', {
     async fetchConfig() {
       this.loading = true; this.error = ''; this.successMsg = '';
       try {
-        // Pedimos toda la configuraciÃ³n de golpe
         const res = await api.get<FullConfig>('/remo/Config', { withCredentials: true })
-        this.originalConfig = JSON.parse(JSON.stringify(res.data))
-        this.draftConfig = JSON.parse(JSON.stringify(res.data))
+        const data = res.data;
+        
+        // Guardamos cÃ³mo llegÃ³ exactamente para futuras comparaciones
+        this.originalConfig = JSON.parse(JSON.stringify(data));
+        
+        // HIDRATACIÃ“N: Si un procesado viene vacÃ­o o no existe, inyectamos el esqueleto para la UI
+        if (!data.FFT || Object.keys(data.FFT).length === 0) data.FFT = JSON.parse(JSON.stringify(templateFFT));
+        if (!data.OMA || Object.keys(data.OMA).length === 0) data.OMA = JSON.parse(JSON.stringify(templateOMA));
+        if (!data.FRF || Object.keys(data.FRF).length === 0) data.FRF = JSON.parse(JSON.stringify(templateFRF));
+
+        this.draftConfig = data;
       } catch (err) {
         console.error("Error al obtener la configuraciÃ³n:", err)
         this.error = "No se pudo cargar la configuraciÃ³n del dispositivo."
@@ -917,11 +931,18 @@ export const useConfigStore = defineStore('config', {
       }
     },
 
-    // Restaura el borrador al Ãºltimo estado guardado
     cancelarCambios() {
       if (this.originalConfig) {
-        this.draftConfig = JSON.parse(JSON.stringify(this.originalConfig))
+        this.fetchConfig(); // Volvemos a hidratar correctamente
       }
+    },
+
+    // Permite a la UI resetear un procesado a su estado de fÃ¡brica (blanco)
+    resetProcesado(tipo: 'FFT' | 'OMA' | 'FRF') {
+      if (!this.draftConfig) return;
+      if (tipo === 'FFT') this.draftConfig.FFT = JSON.parse(JSON.stringify(templateFFT));
+      if (tipo === 'OMA') this.draftConfig.OMA = JSON.parse(JSON.stringify(templateOMA));
+      if (tipo === 'FRF') this.draftConfig.FRF = JSON.parse(JSON.stringify(templateFRF));
     },
 
     async saveConfig() {
@@ -931,18 +952,29 @@ export const useConfigStore = defineStore('config', {
       try {
         const payload = JSON.parse(JSON.stringify(this.draftConfig));
         
-        // PROTECCIÃ“N CRÃTICA: Eliminamos Gestor.Medidas para que el POST 
-        // no sobreescriba lo que maneja MeasuresView.vue[cite: 10]
         if (payload.Gestor && payload.Gestor.Medidas) {
           delete payload.Gestor.Medidas;
         }
 
-        //comentamos la lÃ­nea de codigo que envia la configuracion al dispositivo ReMo y en su defecto hacemos que la imprima como un log para poder probar la configuracion sin comprometer el dispositivo ReMo
-        console.log(payload)
-        //await api.post('/remo/Config', payload, { withCredentials: true })
-        this.successMsg = "ConfiguraciÃ³n aplicada correctamente. El dispositivo aplicarÃ¡ los cambios."
+        // PURGA: Si la secciÃ³n coincide con el esqueleto (estÃ¡ en blanco)
+        // se enviarÃ¡ ausente o vacÃ­a segÃºn llegÃ³ originalmente[cite: 9]
+        if (JSON.stringify(payload.FFT) === JSON.stringify(templateFFT)) {
+          if (!this.originalConfig?.FFT || Object.keys(this.originalConfig.FFT).length === 0) delete payload.FFT;
+          else payload.FFT = {};
+        }
+        if (JSON.stringify(payload.OMA) === JSON.stringify(templateOMA)) {
+          if (!this.originalConfig?.OMA || Object.keys(this.originalConfig.OMA).length === 0) delete payload.OMA;
+          else payload.OMA = {};
+        }
+        if (JSON.stringify(payload.FRF) === JSON.stringify(templateFRF)) {
+          if (!this.originalConfig?.FRF || Object.keys(this.originalConfig.FRF).length === 0) delete payload.FRF;
+          else payload.FRF = {};
+        }
+
+        console.log(payload); // Tu chivato de depuraciÃ³n
+        // await api.post('/remo/Config', payload, { withCredentials: true })
+        this.successMsg = "ConfiguraciÃ³n procesada y depurada correctamente."
         
-        // Actualizamos el original para que el nuevo borrador parta de aquÃ­
         this.originalConfig = JSON.parse(JSON.stringify(payload))
       } catch (err) {
         console.error("Error al guardar la configuraciÃ³n:", err)
@@ -1197,6 +1229,7 @@ const showConfirmModal = ref(false);
 
 onMounted(() => {
   configStore.fetchConfig();
+  auth.fetchDashboardData();
 });
 
 // --- COMPUTADOS ---
@@ -1233,6 +1266,9 @@ const removeATH = (idx: number) => configStore.draftConfig!.ATHAD.ATHs.splice(id
 
 const addAD = () => configStore.draftConfig!.ATHAD.ADs.push({ Sensor: -1, Ganancia: 1 });
 const removeAD = (idx: number) => configStore.draftConfig!.ATHAD.ADs.splice(idx, 1);
+
+const addCalibracion = () => configStore.draftConfig!.ATHAD.Calibracion.push({ Sensor: -1, Gains: [1.0], Offsets: [0.0] });
+const removeCalibracion = (idx: number) => configStore.draftConfig!.ATHAD.Calibracion.splice(idx, 1);
 
 // --- OPERACIONES DE DATAS (AÃ±adir/Eliminar Conjuntos) ---
 const addDataset = () => configStore.draftConfig!.Gestor.Datas.push({ Nombre: 'Nuevo_Conjunto', Canales: [], Estados: [] });
@@ -1416,6 +1452,29 @@ const addStringToArray = (lista: string[], event: Event) => {
                 </table>
               </div>
             </div>
+            <hr class="divider mt-4" />
+            <div class="flex-between mt-4 mb-2">
+              <h2 class="section-title mb-0">CalibraciÃ³n Hardware</h2>
+              <button @click="addCalibracion" class="btn-text btn-text--edit">+ AÃ±adir CalibraciÃ³n</button>
+            </div>
+            <table class="data-table">
+              <thead><tr><th>Sensor</th><th>Gains (JSON Array)</th><th>Offsets (JSON Array)</th><th>AcciÃ³n</th></tr></thead>
+              <tbody>
+                <tr v-for="(cal, idx) in configStore.draftConfig.ATHAD.Calibracion" :key="idx">
+                  <td class="text-center font-bold">
+                    <span v-if="cal.Sensor === -1" class="badge badge-default">Por Defecto</span>
+                    <input v-else v-model.number="cal.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                  </td>
+                  <td>
+                    <input :value="JSON.stringify(cal.Gains)" @change="e => cal.Gains = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                  </td>
+                  <td>
+                    <input :value="JSON.stringify(cal.Offsets)" @change="e => cal.Offsets = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                  </td>
+                  <td class="text-center"><button @click="removeCalibracion(idx)" class="btn-icon text-danger">âœ•</button></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <!-- SECCIÃ“N 2: DATAS (Gestor.Datas) -->
@@ -1482,7 +1541,15 @@ const addStringToArray = (lista: string[], event: Event) => {
             </div>
 
             <div class="proc-content">
-              <h2 class="section-title">ConfiguraciÃ³n: {{ activeProcTab }}</h2>
+              <div class="flex-between" style="border-bottom: 2px solid var(--color-border); margin-bottom: 20px;">
+                <h2 class="section-title" style="border-bottom: none; margin-bottom: 0; padding-bottom: 8px;">ConfiguraciÃ³n: {{ activeProcTab }}</h2>
+                <button v-if="['FFT', 'OMA', 'FRF'].includes(activeProcTab)" 
+                        @click="configStore.resetProcesado(activeProcTab as any)" 
+                        class="btn-text text-danger mb-2" 
+                        title="Vacia este procesado para que se elimine de la configuraciÃ³n">
+                  Borrar configuraciÃ³n actual
+                </button>
+              </div>
               
               <!-- Canales Globales (Para todos excepto OMA) -->
               <div v-if="activeProcTab !== 'OMA' && configStore.draftConfig[activeProcTab]" class="form-group mb-4">
@@ -1530,6 +1597,23 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                     </select>
                   </div>
+                  <!-- Nuevos campos -->
+                  <div class="form-group" v-if="configStore.draftConfig.FFT.Config.Rango"><label class="form-label">Rango Min</label><input v-model.number="configStore.draftConfig.FFT.Config.Rango.Min" type="number" class="form-input" /></div>
+                  <div class="form-group" v-if="configStore.draftConfig.FFT.Config.Rango"><label class="form-label">Rango Max</label><input v-model.number="configStore.draftConfig.FFT.Config.Rango.Max" type="number" class="form-input" /></div>
+                  <div class="form-group flex-between mt-2">
+                    <label class="form-label mb-0">Escala LogarÃ­tmica (dB)</label>
+                    <div class="toggle-wrapper">
+                      <input type="checkbox" id="fft-db" v-model="configStore.draftConfig.FFT.Config.dB" class="toggle-checkbox" />
+                      <label for="fft-db" class="toggle-label"></label>
+                    </div>
+                  </div>
+                </div>
+                
+                <h5 class="mt-4">ParÃ¡metros del Detector</h5>
+                <div class="grid-3-cols mt-2" v-if="configStore.draftConfig.FFT.Config.Detector">
+                  <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="configStore.draftConfig.FFT.Config.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="configStore.draftConfig.FFT.Config.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="configStore.draftConfig.FFT.Config.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
                 </div>
               </div>
 
@@ -1563,10 +1647,81 @@ const addStringToArray = (lista: string[], event: Event) => {
                 </div>
                 <button @click="configStore.draftConfig!.OMA.OMAs.push({ Nombre: 'Nuevo', Canales: ['*'] })" class="btn-text btn-text--edit mt-2">+ AÃ±adir Grupo OMA</button>
 
-                <h4 class="mt-4">ConfiguraciÃ³n OMA SSI</h4>
+                <h4 class="mt-4">ConfiguraciÃ³n OMA SSI (Frecuencia)</h4>
+                <div class="grid-3-cols mt-2">
+                  <div class="form-group"><label class="form-label">Frec. MÃ¡xima</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Estables</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Estables" type="number" class="form-input" /></div>
+                </div>
+
+                <h5 class="mt-4">ParÃ¡metros SSI</h5>
+                <div class="grid-3-cols mt-2" v-if="configStore.draftConfig.OMA.Config.SSI">
+                  <div class="form-group"><label class="form-label">p</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.p" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">nb</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.nb" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">step</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.step" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.ordmax" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.ordmin" type="number" class="form-input" /></div>
+                </div>
+
+                <div class="grid-2-cols mt-4">
+                  <div>
+                    <h5>Hard Criteria</h5>
+                    <div class="grid-2-cols mt-2" v-if="configStore.draftConfig.OMA.Config['Hard Criteria']">
+                      <div class="form-group flex-between">
+                        <label class="form-label mb-0">Conj</label>
+                        <div class="toggle-wrapper">
+                          <input type="checkbox" id="oma-conj" v-model="configStore.draftConfig.OMA.Config['Hard Criteria'].conj" class="toggle-checkbox" />
+                          <label for="oma-conj" class="toggle-label"></label>
+                        </div>
+                      </div>
+                      <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="configStore.draftConfig.OMA.Config['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
+                    </div>
+                  </div>
+                  <div>
+                    <h5>Soft Criteria</h5>
+                    <div class="form-group mt-2" v-if="configStore.draftConfig.OMA.Config['Soft Criteria']">
+                      <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="configStore.draftConfig.OMA.Config['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="configStore.draftConfig.OMA.Config['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
+                      <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="configStore.draftConfig.OMA.Config['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ðŸ‘‡ AÃ‘ADIR CONFIGURACIÃ“N FRF AQUÃ ðŸ‘‡ -->
+              <div v-if="activeProcTab === 'FRF' && configStore.draftConfig.FRF?.Config" class="config-box">
+                <h4>ConfiguraciÃ³n FRF</h4>
                 <div class="grid-2-cols mt-2">
-                  <div class="form-group"><label class="form-label">Frec. Max</label><input v-model.number="configStore.draftConfig.OMA.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">SSI p</label><input v-model.number="configStore.draftConfig.OMA.Config.SSI.p" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">ExcitaciÃ³n (Canal)</label><input v-model="configStore.draftConfig.FRF.Config.Excitacion.Canal" type="text" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">ExcitaciÃ³n (Masa)</label><input v-model.number="configStore.draftConfig.FRF.Config.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
+                </div>
+                <div class="grid-3-cols mt-3">
+                  <div class="form-group"><label class="form-label">Res F</label><input v-model.number="configStore.draftConfig.FRF.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="configStore.draftConfig.FRF.Config['Inc F']" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group">
+                    <label class="form-label">Ventana</label>
+                    <select v-model="configStore.draftConfig.FRF.Config.Ventana" class="form-select">
+                      <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="grid-3-cols mt-3">
+                  <div class="form-group">
+                    <label class="form-label">Promedio</label>
+                    <select v-model="configStore.draftConfig.FRF.Config.Promedio" class="form-select">
+                      <option>Lineal</option><option>Exponencial</option>
+                    </select>
+                  </div>
+                  <div class="form-group"><label class="form-label">Frecuencia MÃ­nima</label><input v-model.number="configStore.draftConfig.FRF.Config.Frecuencia.Minima" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Frecuencia MÃ¡xima</label><input v-model.number="configStore.draftConfig.FRF.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
+                </div>
+                <h5 class="mt-4">AnÃ¡lisis Modal Experimental (EMA)</h5>
+                <div class="grid-2-cols mt-2">
+                  <div class="form-group"><label class="form-label">Modos</label><input v-model.number="configStore.draftConfig.FRF.Config.EMA.Modos" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="configStore.draftConfig.FRF.Config.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
                 </div>
               </div>
 
@@ -1581,6 +1736,22 @@ const addStringToArray = (lista: string[], event: Event) => {
               <div class="form-group"><label class="form-label">Token de Acceso</label><input v-model="configStore.draftConfig.InfluxDB.DB.Token" type="password" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Organization ID</label><input v-model="configStore.draftConfig.InfluxDB.DB.OrgID" type="text" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Bucket</label><input v-model="configStore.draftConfig.InfluxDB.DB.Bucket" type="text" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Reintentos de ConexiÃ³n</label><input v-model.number="configStore.draftConfig.InfluxDB.Reintentos" type="number" class="form-input" /></div>
+            </div>
+
+            <hr class="divider mt-4 mb-4" />
+            <h2 class="section-title">Enrutado de Loggers</h2>
+            <p class="text-muted">Define bajo quÃ© nombre de "Medida" de InfluxDB se guardan los datos procesados en la nube.</p>
+            <div class="config-box" v-if="configStore.draftConfig.InfluxDB.Loggers">
+              <div class="grid-3-cols">
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.DataSet"><label class="form-label">DataSet</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.DataSet.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.Data"><label class="form-label">Data</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.Data.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.TA"><label class="form-label">TA</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.TA.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.OMA"><label class="form-label">OMA</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.OMA.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.FFT"><label class="form-label">FFT (Base)</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.FFT.Medida" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.FFT"><label class="form-label">FFT (FA)</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.FFT['Medida FA']" type="text" class="form-input" /></div>
+                <div class="form-group" v-if="configStore.draftConfig.InfluxDB.Loggers.FRF"><label class="form-label">FRF</label><input v-model="configStore.draftConfig.InfluxDB.Loggers.FRF.Medida" type="text" class="form-input" /></div>
+              </div>
             </div>
           </div>
 
@@ -1725,6 +1896,15 @@ const addStringToArray = (lista: string[], event: Event) => {
 .pb-3 { padding-bottom: 0.75rem; }
 .text-muted { color: var(--color-text-secondary); font-size: 0.9rem; }
 .data-card { border: 1px solid var(--color-border); padding: 15px; border-radius: 6px; background-color: var(--color-bg-main); }
+
+/* ESTILOS PARA LOS TOGGLES (Interruptores) */
+.toggle-wrapper { position: relative; display: inline-block; width: 2.75rem; height: 1.5rem; vertical-align: middle; user-select: none; }
+.toggle-checkbox { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; z-index: 10; margin: 0; }
+.toggle-label { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-input-border); border-radius: 9999px; cursor: pointer; transition: background-color 0.2s; }
+.toggle-label::before { content: ""; position: absolute; height: 1.15rem; width: 1.15rem; left: 0.15rem; bottom: 0.175rem; background-color: var(--color-bg-white); border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.toggle-checkbox:checked + .toggle-label { background-color: var(--color-primary); }
+.toggle-checkbox:checked + .toggle-label::before { transform: translateX(1.25rem); }
+
 </style>
 views\HomeView.vue:
 <script setup lang="ts">
@@ -1917,6 +2097,44 @@ interface ProcesadoUI { Nombre: string; Config: string; isCustom: boolean }
 const procesadosUI = ref<ProcesadoUI[]>([]);
 const opcionesProcesado = ['TA', 'FFT', 'OMA', 'FRF', 'Data'];
 
+const isProcModalOpen = ref(false);
+const editingProcIndex = ref<number | null>(null);
+const tempProcConfig = ref<any>({}); // AquÃ­ guardaremos el objeto JS temporal
+
+const defaultProcConfigs: Record<string, any> = {
+  'FFT': { "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Rango": { "Min": 0, "Max": -1 }, "dB": false, "Detector": { "Guarda": 0.5, "Promedio": 1.5, "Umbral": 4.0 } },
+  'OMA': { "Frecuencia": { "Maxima": 10, "Tolerancia": 0.05, "Estables": 0 }, "SSI": { "p": 30, "nb": 30, "step": 1, "ordmax": 50, "ordmin": 1 }, "Hard Criteria": { "conj": true, "xi_max": 0.1, "mpc_lim": 0.7, "mpd_lim": 0.3, "cov_max": 0.2 }, "Soft Criteria": { "err_fn": 0.01, "err_xi": 0.05, "err_phi": 0.03 } },
+  'FRF': { "Excitacion": { "Canal": "", "Masa": 1.0 }, "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Promedio": "Lineal", "Frecuencia": { "Minima": 1, "Maxima": 10 }, "EMA": { "Modos": 5, "dr_umbral": 0.1 } },
+  'Data': { "Canales": [] },
+  'TA': { "Canales": [] }
+};
+
+const openProcModal = (idx: number) => {
+  const proc = procesadosUI.value[idx];
+  editingProcIndex.value = idx;
+  try {
+    // Si ya hay texto, lo convertimos a Objeto para editarlo. Si no, usamos la plantilla en blanco.
+    tempProcConfig.value = (proc.Config && proc.Config.trim() !== '') 
+      ? JSON.parse(proc.Config) 
+      : JSON.parse(JSON.stringify(defaultProcConfigs[proc.Nombre] || {}));
+  } catch {
+    tempProcConfig.value = JSON.parse(JSON.stringify(defaultProcConfigs[proc.Nombre] || {}));
+  }
+  isProcModalOpen.value = true;
+};
+
+const saveProcModal = () => {
+  if (editingProcIndex.value !== null) {
+    // Volvemos a convertir el objeto a texto JSON para LabVIEW
+    procesadosUI.value[editingProcIndex.value].Config = JSON.stringify(tempProcConfig.value);
+  }
+  isProcModalOpen.value = false;
+};
+
+const closeProcModal = () => {
+  isProcModalOpen.value = false;
+  editingProcIndex.value = null;
+};
 
 const getEmptyMeasure = (): MedidaItem => ({
   Nombre: '',
@@ -2330,8 +2548,9 @@ const handleEliminar = async (medida: MedidaItem) => {
             <label class="checkbox-label mt-2">
               <input type="checkbox" v-model="proc.isCustom" /> Personalizar ConfiguraciÃ³n
             </label>
-            <input v-if="proc.isCustom" v-model="proc.Config" type="text" class="form-input mt-2"
-              placeholder='Ej. {"Res F": 0.1}' />
+            <button v-if="proc.isCustom" @click="openProcModal(idx)" type="button" class="btn-secondary mt-2" style="width: 100%; display: flex; justify-content: center; gap: 8px;">
+              <span>âš™ï¸</span> Configurar {{ proc.Nombre }}
+            </button>
           </div>
           <button @click="procesadosUI.push({ Nombre: '', Config: '', isCustom: false })" type="button"
             class="btn-text btn-text--edit mt-2">+ AÃ±adir Procesado</button>
@@ -2348,7 +2567,133 @@ const handleEliminar = async (medida: MedidaItem) => {
     </aside>
 
     <div v-if="isPanelOpen" @click="closePanel" class="overlay"></div>
+    <!-- MODAL DE CONFIGURACIÃ“N DE PROCESADO -->
+    <div v-if="isProcModalOpen && editingProcIndex !== null" class="overlay" style="z-index: 100;">
+      <div class="modal-box" style="max-width: 650px; text-align: left;">
+        <div class="panel-header" style="margin: -30px -30px 20px -30px; border-radius: 12px 12px 0 0;">
+          <h2 class="panel-title">ConfiguraciÃ³n de: {{ procesadosUI[editingProcIndex].Nombre }}</h2>
+          <button @click="closeProcModal" class="btn-icon text-white">âœ•</button>
+        </div>
+        
+        <div class="modal-body" style="max-height: 65vh; overflow-y: auto; padding-right: 10px;">
+          
+          <!-- FFT -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre === 'FFT'">
+            <div class="grid-2-cols mb-2">
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group">
+                <label class="form-label">Ventana</label>
+                <select v-model="tempProcConfig.Ventana" class="form-select">
+                  <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-2-cols mb-2" v-if="tempProcConfig.Rango">
+              <div class="form-group"><label class="form-label">Rango Min</label><input v-model.number="tempProcConfig.Rango.Min" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Rango Max</label><input v-model.number="tempProcConfig.Rango.Max" type="number" class="form-input" /></div>
+            </div>
+            <div class="form-group flex-between mb-4">
+              <label class="form-label mb-0">Escala LogarÃ­tmica (dB)</label>
+              <div class="toggle-wrapper"><input type="checkbox" id="mod-fft-db" v-model="tempProcConfig.dB" class="toggle-checkbox" /><label for="mod-fft-db" class="toggle-label"></label></div>
+            </div>
+            
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">ParÃ¡metros del Detector</h5>
+            <div class="grid-3-cols" v-if="tempProcConfig.Detector">
+              <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="tempProcConfig.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="tempProcConfig.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="tempProcConfig.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
+            </div>
+          </div>
+
+          <!-- OMA -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'OMA'">
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Frecuencia</h5>
+            <div class="grid-3-cols mb-4">
+              <div class="form-group"><label class="form-label">MÃ¡xima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="tempProcConfig.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Estables</label><input v-model.number="tempProcConfig.Frecuencia.Estables" type="number" class="form-input" /></div>
+            </div>
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">SSI</h5>
+            <div class="grid-3-cols mb-4" v-if="tempProcConfig.SSI">
+              <div class="form-group"><label class="form-label">p</label><input v-model.number="tempProcConfig.SSI.p" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">nb</label><input v-model.number="tempProcConfig.SSI.nb" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">step</label><input v-model.number="tempProcConfig.SSI.step" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="tempProcConfig.SSI.ordmax" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="tempProcConfig.SSI.ordmin" type="number" class="form-input" /></div>
+            </div>
+            <div class="grid-2-cols">
+              <div>
+                <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Hard Criteria</h5>
+                <div class="grid-2-cols" v-if="tempProcConfig['Hard Criteria']">
+                  <div class="form-group flex-between"><label class="form-label mb-0">Conj</label><div class="toggle-wrapper"><input type="checkbox" id="mod-oma-conj" v-model="tempProcConfig['Hard Criteria'].conj" class="toggle-checkbox" /><label for="mod-oma-conj" class="toggle-label"></label></div></div>
+                  <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="tempProcConfig['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="tempProcConfig['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
+                </div>
+              </div>
+              <div>
+                <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Soft Criteria</h5>
+                <div class="form-group" v-if="tempProcConfig['Soft Criteria']">
+                  <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="tempProcConfig['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FRF -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'FRF'">
+            <div class="grid-2-cols mb-2">
+              <div class="form-group"><label class="form-label">ExcitaciÃ³n (Canal)</label><input v-model="tempProcConfig.Excitacion.Canal" type="text" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ExcitaciÃ³n (Masa)</label><input v-model.number="tempProcConfig.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
+            </div>
+            <div class="grid-3-cols mb-2">
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group">
+                <label class="form-label">Ventana</label>
+                <select v-model="tempProcConfig.Ventana" class="form-select">
+                  <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-3-cols mb-4">
+              <div class="form-group">
+                <label class="form-label">Promedio</label>
+                <select v-model="tempProcConfig.Promedio" class="form-select"><option>Lineal</option><option>Exponencial</option></select>
+              </div>
+              <div class="form-group"><label class="form-label">Frec. MÃ­nima</label><input v-model.number="tempProcConfig.Frecuencia.Minima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Frec. MÃ¡xima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
+            </div>
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">AnÃ¡lisis Modal Experimental (EMA)</h5>
+            <div class="grid-2-cols">
+              <div class="form-group"><label class="form-label">Modos</label><input v-model.number="tempProcConfig.EMA.Modos" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="tempProcConfig.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
+            </div>
+          </div>
+
+          <!-- DATA / TA -->
+          <div v-else>
+            <div class="form-group">
+              <label class="form-label">Sobrescribir Canales (JSON Array string)</label>
+              <p class="form-hint mb-2">Escribe ["*"] para aplicar a todos, o dÃ©jalo en blanco para usar la configuraciÃ³n global.</p>
+              <textarea :value="JSON.stringify(tempProcConfig.Canales || [])" @change="e => tempProcConfig.Canales = JSON.parse((e.target as HTMLTextAreaElement).value)" class="form-input" rows="3"></textarea>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px; border-top: 1px solid var(--color-border); padding-top: 20px;">
+          <button @click="closeProcModal" class="btn-secondary">Cancelar</button>
+          <button @click="saveProcModal" class="btn-primary">Aceptar y Guardar</button>
+        </div>
+      </div>
+    </div>
   </div>
+  
 </template>
 
 <style scoped>

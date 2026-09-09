@@ -201,9 +201,9 @@ const addStringToArray = (lista: string[], event: Event) => {
                   <thead><tr><th>Sensor</th><th>Rango</th><th>HPF</th><th></th></tr></thead>
                   <tbody>
                     <tr v-for="(ath, idx) in configStore.draftConfig.ATHAD.ATHs" :key="idx">
-                      <td class="text-center font-bold">
-                        <span v-if="ath.Sensor === -1" class="badge badge-default">Por Defecto</span>
-                        <input v-else v-model.number="ath.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                      <td class="text-center">
+                        <input v-model.number="ath.Sensor" type="number" class="form-input-sm" style="width: 60px;" title="Escribe -1 para configuración por defecto" />
+                        <div v-if="ath.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                       </td>
                       <td>
                         <select v-model="ath.Rango" class="form-select list-input-sm">
@@ -225,9 +225,9 @@ const addStringToArray = (lista: string[], event: Event) => {
                   <thead><tr><th>Sensor</th><th>Ganancia</th><th></th></tr></thead>
                   <tbody>
                     <tr v-for="(ad, idx) in configStore.draftConfig.ATHAD.ADs" :key="idx">
-                      <td class="text-center font-bold">
-                        <span v-if="ad.Sensor === -1" class="badge badge-default">Por Defecto</span>
-                        <input v-else v-model.number="ad.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                      <td class="text-center">
+                        <input v-model.number="ad.Sensor" type="number" class="form-input-sm" style="width: 60px;" title="Escribe -1 para configuración por defecto" />
+                        <div v-if="ad.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                       </td>
                       <td><input v-model.number="ad.Ganancia" type="number" class="form-input-sm" /></td>
                       <td class="text-center"><button @click="removeAD(idx)" class="btn-icon text-danger">✕</button></td>
@@ -245,9 +245,9 @@ const addStringToArray = (lista: string[], event: Event) => {
               <thead><tr><th>Sensor</th><th>Gains (JSON Array)</th><th>Offsets (JSON Array)</th><th>Acción</th></tr></thead>
               <tbody>
                 <tr v-for="(cal, idx) in configStore.draftConfig.ATHAD.Calibracion" :key="idx">
-                  <td class="text-center font-bold">
-                    <span v-if="cal.Sensor === -1" class="badge badge-default">Por Defecto</span>
-                    <input v-else v-model.number="cal.Sensor" type="number" class="form-input-sm" style="width: 50px;" />
+                  <td class="text-center">
+                    <input v-model.number="cal.Sensor" type="number" class="form-input-sm" style="width: 60px;" title="Escribe -1 para configuración por defecto" />
+                    <div v-if="cal.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                   </td>
                   <td>
                     <input :value="JSON.stringify(cal.Gains)" @change="e => cal.Gains = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />

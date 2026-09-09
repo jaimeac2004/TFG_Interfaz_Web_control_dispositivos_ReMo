@@ -33,6 +33,73 @@ interface ProcesadoUI { Nombre: string; Config: string; isCustom: boolean }
 const procesadosUI = ref<ProcesadoUI[]>([]);
 const opcionesProcesado = ['TA', 'FFT', 'OMA', 'FRF', 'Data'];
 
+const isProcModalOpen = ref(false);
+const editingProcIndex = ref<number | null>(null);
+const tempProcConfig = ref<any>({}); // Aquí guardaremos el objeto JS temporal
+
+const defaultProcConfigs: Record<string, any> = {
+  'FFT': { "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Rango": { "Min": 0, "Max": -1 }, "dB": false, "Detector": { "Guarda": 0.5, "Promedio": 1.5, "Umbral": 4.0 } },
+  'OMA': { "Frecuencia": { "Maxima": 10, "Tolerancia": 0.05, "Estables": 0 }, "SSI": { "p": 30, "nb": 30, "step": 1, "ordmax": 50, "ordmin": 1 }, "Hard Criteria": { "conj": true, "xi_max": 0.1, "mpc_lim": 0.7, "mpd_lim": 0.3, "cov_max": 0.2 }, "Soft Criteria": { "err_fn": 0.01, "err_xi": 0.05, "err_phi": 0.03 } },
+  'FRF': { "Excitacion": { "Canal": "", "Masa": 1.0 }, "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Promedio": "Lineal", "Frecuencia": { "Minima": 1, "Maxima": 10 }, "EMA": { "Modos": 5, "dr_umbral": 0.1 } },
+  'Data': { "Canales": [] },
+  'TA': { "Canales": [] }
+};
+
+const openProcModal = (idx: number) => {
+  const proc = procesadosUI.value[idx];
+  editingProcIndex.value = idx;
+  try {
+    // Si ya hay texto, lo convertimos a Objeto para editarlo. Si no, usamos la plantilla en blanco.
+    tempProcConfig.value = (proc.Config && proc.Config.trim() !== '') 
+      ? JSON.parse(proc.Config) 
+      : JSON.parse(JSON.stringify(defaultProcConfigs[proc.Nombre] || {}));
+  } catch {
+    tempProcConfig.value = JSON.parse(JSON.stringify(defaultProcConfigs[proc.Nombre] || {}));
+  }
+  isProcModalOpen.value = true;
+};
+
+const saveProcModal = () => {
+  if (editingProcIndex.value !== null) {
+    // Volvemos a convertir el objeto a texto JSON para LabVIEW
+    procesadosUI.value[editingProcIndex.value].Config = JSON.stringify(tempProcConfig.value);
+  }
+  isProcModalOpen.value = false;
+};
+
+const closeProcModal = () => {
+  isProcModalOpen.value = false;
+  editingProcIndex.value = null;
+};
+
+// --- UTILIDADES DE PROCESADO (Gestión del * y modos en el modal) ---
+const getProcMode = (canales: string[] | undefined) => {
+  if (!canales || canales.length === 0) return 'manual';
+  if (canales.length === 1 && canales[0] === '*') return 'todos';
+  if (canales.length === 1 && measuresStore.listaDatas.includes(canales[0])) return 'conjunto';
+  return 'manual';
+};
+
+const setProcMode = (mode: string, parent: any, key: string) => {
+  if (mode === 'todos') {
+    parent[key] = ['*'];
+  } else if (mode === 'conjunto') {
+    const firstData = measuresStore.listaDatas[0] || '';
+    parent[key] = [firstData];
+  } else {
+    parent[key] = [];
+  }
+};
+
+const addStringToArray = (lista: string[], event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  if (target && target.value) {
+    if (!lista.includes(target.value)) {
+      lista.push(target.value);
+    }
+    target.value = ''; // Resetea el desplegable
+  }
+};
 
 const getEmptyMeasure = (): MedidaItem => ({
   Nombre: '',
@@ -446,8 +513,9 @@ const handleEliminar = async (medida: MedidaItem) => {
             <label class="checkbox-label mt-2">
               <input type="checkbox" v-model="proc.isCustom" /> Personalizar Configuración
             </label>
-            <input v-if="proc.isCustom" v-model="proc.Config" type="text" class="form-input mt-2"
-              placeholder='Ej. {"Res F": 0.1}' />
+            <button v-if="proc.isCustom" @click="openProcModal(idx)" type="button" class="btn-secondary mt-2" style="width: 100%; display: flex; justify-content: center; gap: 8px;">
+              <span>⚙️</span> Configurar {{ proc.Nombre }}
+            </button>
           </div>
           <button @click="procesadosUI.push({ Nombre: '', Config: '', isCustom: false })" type="button"
             class="btn-text btn-text--edit mt-2">+ Añadir Procesado</button>
@@ -464,7 +532,160 @@ const handleEliminar = async (medida: MedidaItem) => {
     </aside>
 
     <div v-if="isPanelOpen" @click="closePanel" class="overlay"></div>
+    <!-- MODAL DE CONFIGURACIÓN DE PROCESADO -->
+    <div v-if="isProcModalOpen && editingProcIndex !== null" class="modal-overlay">
+      <div class="modal-box" style="max-width: 650px; text-align: left;">
+        <div class="panel-header" style="margin: -30px -30px 20px -30px; border-radius: 12px 12px 0 0;">
+          <h2 class="panel-title">Configuración de: {{ procesadosUI[editingProcIndex].Nombre }}</h2>
+          <button @click="closeProcModal" class="btn-icon text-white">✕</button>
+        </div>
+        
+        <div class="modal-body" style="max-height: 65vh; overflow-y: auto; padding-right: 10px;">
+          
+          <!-- FFT -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre === 'FFT'">
+            <div class="grid-2-cols mb-2">
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group">
+                <label class="form-label">Ventana</label>
+                <select v-model="tempProcConfig.Ventana" class="form-select">
+                  <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-2-cols mb-2" v-if="tempProcConfig.Rango">
+              <div class="form-group"><label class="form-label">Rango Min</label><input v-model.number="tempProcConfig.Rango.Min" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Rango Max</label><input v-model.number="tempProcConfig.Rango.Max" type="number" class="form-input" /></div>
+            </div>
+            <div class="form-group flex-between mb-4">
+              <label class="form-label mb-0">Escala Logarítmica (dB)</label>
+              <div class="toggle-wrapper"><input type="checkbox" id="mod-fft-db" v-model="tempProcConfig.dB" class="toggle-checkbox" /><label for="mod-fft-db" class="toggle-label"></label></div>
+            </div>
+            
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Parámetros del Detector</h5>
+            <div class="grid-3-cols" v-if="tempProcConfig.Detector">
+              <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="tempProcConfig.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="tempProcConfig.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="tempProcConfig.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
+            </div>
+          </div>
+
+          <!-- OMA -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'OMA'">
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Frecuencia</h5>
+            <div class="grid-3-cols mb-4">
+              <div class="form-group"><label class="form-label">Máxima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="tempProcConfig.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Estables</label><input v-model.number="tempProcConfig.Frecuencia.Estables" type="number" class="form-input" /></div>
+            </div>
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">SSI</h5>
+            <div class="grid-3-cols mb-4" v-if="tempProcConfig.SSI">
+              <div class="form-group"><label class="form-label">p</label><input v-model.number="tempProcConfig.SSI.p" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">nb</label><input v-model.number="tempProcConfig.SSI.nb" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">step</label><input v-model.number="tempProcConfig.SSI.step" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="tempProcConfig.SSI.ordmax" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="tempProcConfig.SSI.ordmin" type="number" class="form-input" /></div>
+            </div>
+            <div class="grid-2-cols">
+              <div>
+                <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Hard Criteria</h5>
+                <div class="grid-2-cols" v-if="tempProcConfig['Hard Criteria']">
+                  <div class="form-group flex-between"><label class="form-label mb-0">Conj</label><div class="toggle-wrapper"><input type="checkbox" id="mod-oma-conj" v-model="tempProcConfig['Hard Criteria'].conj" class="toggle-checkbox" /><label for="mod-oma-conj" class="toggle-label"></label></div></div>
+                  <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="tempProcConfig['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="tempProcConfig['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
+                </div>
+              </div>
+              <div>
+                <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Soft Criteria</h5>
+                <div class="form-group" v-if="tempProcConfig['Soft Criteria']">
+                  <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="tempProcConfig['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FRF -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'FRF'">
+            <div class="grid-2-cols mb-2">
+              <div class="form-group"><label class="form-label">Excitación (Canal)</label><input v-model="tempProcConfig.Excitacion.Canal" type="text" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Excitación (Masa)</label><input v-model.number="tempProcConfig.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
+            </div>
+            <div class="grid-3-cols mb-2">
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group">
+                <label class="form-label">Ventana</label>
+                <select v-model="tempProcConfig.Ventana" class="form-select">
+                  <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-3-cols mb-4">
+              <div class="form-group">
+                <label class="form-label">Promedio</label>
+                <select v-model="tempProcConfig.Promedio" class="form-select"><option>Lineal</option><option>Exponencial</option></select>
+              </div>
+              <div class="form-group"><label class="form-label">Frec. Mínima</label><input v-model.number="tempProcConfig.Frecuencia.Minima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Frec. Máxima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
+            </div>
+            <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Análisis Modal Experimental (EMA)</h5>
+            <div class="grid-2-cols">
+              <div class="form-group"><label class="form-label">Modos</label><input v-model.number="tempProcConfig.EMA.Modos" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="tempProcConfig.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
+            </div>
+          </div>
+
+          <!-- DATA / TA -->
+          <div v-else>
+            <div class="form-group mb-4">
+              <label class="form-label">Canales objetivo para {{ procesadosUI[editingProcIndex].Nombre }}</label>
+              
+              <!-- Selector Inteligente de Modo -->
+              <select :value="getProcMode(tempProcConfig.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, tempProcConfig, 'Canales')" class="form-select mb-2">
+                <option value="todos">Todos los Canales (*)</option>
+                <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
+                <option value="manual">Selección Manual de Canales</option>
+              </select>
+
+              <!-- Si eligen Conjunto -->
+              <div v-if="getProcMode(tempProcConfig.Canales) === 'conjunto'">
+                <select v-model="tempProcConfig.Canales[0]" class="form-select">
+                  <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">
+                    Usar grupo: {{ d }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Si eligen Manual -->
+              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" style="background: var(--color-bg-main); padding: 10px; border-radius: 6px; border: 1px dashed var(--color-input-border);">
+                <div class="tags-container mb-2">
+                  <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">
+                    {{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">✕</button>
+                  </span>
+                </div>
+                <select @change="addStringToArray(tempProcConfig.Canales, $event)" class="form-select">
+                  <option value="">+ Añadir Canal al Procesado...</option>
+                  <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px; border-top: 1px solid var(--color-border); padding-top: 20px;">
+          <button @click="closeProcModal" class="btn-secondary">Cancelar</button>
+          <button @click="saveProcModal" class="btn-primary">Aceptar y Guardar</button>
+        </div>
+      </div>
+    </div>
   </div>
+  
 </template>
 
 <style scoped>
@@ -901,4 +1122,39 @@ const handleEliminar = async (medida: MedidaItem) => {
   gap: 10px;
   align-items: center;
 }
+
+/* MODAL DE CONFIGURACIÓN DE PROCESADOS */
+.modal-overlay { 
+  position: fixed; 
+  inset: 0; 
+  background-color: rgba(0, 0, 0, 0.5); /* Fondo oscuro semitransparente */
+  z-index: 100; /* Lo pone por encima de la barra lateral de edición */
+  display: flex; 
+  align-items: center; /* Lo centra verticalmente */
+  justify-content: center; /* Lo centra horizontalmente */
+  backdrop-filter: blur(2px); 
+}
+
+.modal-box { 
+  background-color: var(--color-bg-white); /* Fondo blanco (o gris oscuro en modo noche) */
+  padding: 30px; 
+  border-radius: 12px; 
+  width: 90%; 
+  max-width: 650px; 
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+  border: 1px solid var(--color-border); 
+}
+
+.modal-actions { 
+  display: flex; 
+  justify-content: flex-end; /* Alinea los botones a la derecha */
+  gap: 15px; 
+}
+
+/* ESTILOS PARA ETIQUETAS (TAGS) */
+.tags-container { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.badge-tag { background: var(--color-primary); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.tag-close { background: none; border: none; color: white; cursor: pointer; font-weight: bold; padding: 0; opacity: 0.8; transition: opacity 0.2s; }
+.tag-close:hover { opacity: 1; color: #fca5a5; }
+
 </style>
