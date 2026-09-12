@@ -673,6 +673,7 @@ import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import ConfigView from '@/views/ConfigurationView.vue'
 import MeasuresView from '@/views/MeasuresView.vue'
+import SystemView from '@/views/SystemView.vue'
 import { useAuthStore } from '@/stores/authStore'
 
 const router = createRouter({
@@ -691,6 +692,12 @@ const router = createRouter({
       name: 'measures',
       component: MeasuresView,
       meta: { requiresAuth: true}
+    },
+    {
+      path: '/system',
+      name: 'system',
+      component: SystemView,
+      meta: { requiresAuth: true }
     }
   ]
 })
@@ -989,6 +996,33 @@ export const useConfigStore = defineStore('config', {
       } finally {
         this.loading = false
       }
+    },
+    async saveNodos() {
+      if (!this.draftConfig) return;
+      this.loading = true; this.error = ''; this.successMsg = '';
+
+      try {
+        const nodosPayload = JSON.parse(JSON.stringify(this.draftConfig.Gestor.Nodos));
+        if (Array.isArray(nodosPayload)) {
+          nodosPayload.sort((a: any, b: any) => a.Sensor - b.Sensor);
+        }
+
+        // Endpoint especÃ­fico segÃºn la documentaciÃ³n: POST /remo/Nodos
+        await api.post('/remo/Nodos', nodosPayload, { withCredentials: true });
+        this.successMsg = "Nodos lÃ³gicos actualizados correctamente en el hardware.";
+
+        // Mantenemos la sincronÃ­a del estado local ordenado
+        this.draftConfig.Gestor.Nodos = JSON.parse(JSON.stringify(nodosPayload));
+        if (this.originalConfig) {
+          this.originalConfig.Gestor.Nodos = JSON.parse(JSON.stringify(nodosPayload));
+        }
+      } catch (err) {
+        console.error("Error al enviar los nodos:", err);
+        this.error = "Error al actualizar los nodos en el hardware.";
+        throw err;
+      } finally {
+        this.loading = false;
+      }
     }
   }
 })
@@ -1221,21 +1255,37 @@ views\AboutView.vue:
 
 views\ConfigurationView.vue:
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 
 const auth = useAuthStore();
 const configStore = useConfigStore();
+const router = useRouter();
+let pollInterval: any = null;
 
 // --- ESTADOS DE LA UI ---
-const activeMenu = ref<'global' | 'datas' | 'procesado' | 'influx'>('global');
+const activeMenu = ref<'global' | 'nodos' | 'datas' | 'procesado' | 'influx'>('global');
 const activeProcTab = ref<'Data' | 'TA' | 'FFT' | 'OMA' | 'FRF'>('Data');
 const showConfirmModal = ref(false);
 
 onMounted(() => {
   configStore.fetchConfig();
   auth.fetchDashboardData();
+
+  // ComprobaciÃ³n pasiva: Solo mira si seguimos logueados, NUNCA recarga la configuraciÃ³n
+  pollInterval = setInterval(async () => {
+    await auth.checkSession();
+    if (!auth.isAuthenticated) {
+      alert("Tu sesiÃ³n ha caducado por inactividad. SerÃ¡s redirigido al inicio de sesiÃ³n.");
+      router.push('/login');
+    }
+  }, 10000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
 });
 
 // --- COMPUTADOS ---
@@ -1295,7 +1345,8 @@ const setProcMode = (mode: string, parent: any, key: string) => {
     const firstData = configStore.draftConfig?.Gestor.Datas[0]?.Nombre || '';
     parent[key] = [firstData];
   } else {
-    parent[key] = [];
+    parent.Canales = [];
+    parent.Estados = [];
   }
 };
 
@@ -1345,19 +1396,22 @@ const addStringToArray = (lista: string[], event: Event) => {
       <!-- LAYOUT DIVIDIDO -->
       <div v-else-if="configStore.draftConfig" class="config-layout">
         
-        <!-- SIDEBAR DE SECCIONES (Pegado a la izquierda) -->
+        <!-- SIDEBAR DE SECCIONES -->
         <aside class="config-sidebar">
           <button :class="['nav-btn', { active: activeMenu === 'global' }]" @click="activeMenu = 'global'">
             1. Global y Hardware
           </button>
+          <button :class="['nav-btn', { active: activeMenu === 'nodos' }]" @click="activeMenu = 'nodos'">
+            2. Nodos LÃ³gicos
+          </button>
           <button :class="['nav-btn', { active: activeMenu === 'datas' }]" @click="activeMenu = 'datas'">
-            2. Conjuntos de Datos
+            3. Conjuntos de Datos
           </button>
           <button :class="['nav-btn', { active: activeMenu === 'procesado' }]" @click="activeMenu = 'procesado'">
-            3. Procesamiento
+            4. Procesamiento
           </button>
           <button :class="['nav-btn', { active: activeMenu === 'influx' }]" @click="activeMenu = 'influx'">
-            4. InfluxDB
+            5. InfluxDB
           </button>
         </aside>
 
@@ -1376,26 +1430,6 @@ const addStringToArray = (lista: string[], event: Event) => {
                 <option :value="4000">4000 Hz</option>
               </select>
             </div>
-
-            <hr class="divider" />
-            
-            <div class="flex-between mt-4 mb-2">
-              <h2 class="section-title mb-0">Nodos LÃ³gicos (Gestor.Nodos)</h2>
-              <button @click="addNodo" class="btn-text btn-text--edit">+ AÃ±adir Nodo</button>
-            </div>
-            <table class="data-table">
-              <thead><tr><th>Sensor (Pos)</th><th>Nombre</th><th>Pos X</th><th>Pos Y</th><th>Pos Z</th><th>AcciÃ³n</th></tr></thead>
-              <tbody>
-                <tr v-for="(nodo, idx) in configStore.draftConfig.Gestor.Nodos" :key="idx">
-                  <td><input v-model.number="nodo.Sensor" type="number" class="form-input-sm" /></td>
-                  <td><input v-model="nodo.Nombre" type="text" class="form-input-sm" /></td>
-                  <td><input v-model.number="nodo.Posicion.x" type="number" class="form-input-sm" /></td>
-                  <td><input v-model.number="nodo.Posicion.y" type="number" class="form-input-sm" /></td>
-                  <td><input v-model.number="nodo.Posicion.z" type="number" class="form-input-sm" /></td>
-                  <td class="text-center"><button @click="removeNodo(idx)" class="btn-icon text-danger" title="Borrar Nodo">âœ•</button></td>
-                </tr>
-              </tbody>
-            </table>
 
             <hr class="divider mt-4" />
 
@@ -1483,7 +1517,48 @@ const addStringToArray = (lista: string[], event: Event) => {
             </table>
           </div>
 
-          <!-- SECCIÃ“N 2: DATAS (Gestor.Datas) -->
+          <!-- SECCIÃ“N 2: NODOS LÃ“GICOS (Gestor.Nodos) -->
+          <div v-else-if="activeMenu === 'nodos'" class="fade-in">
+            <div class="flex-between mb-4" style="border-bottom: 2px solid var(--color-border); padding-bottom: 8px;">
+              <div>
+                <h2 class="section-title mb-0" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Nodos LÃ³gicos (Gestor.Nodos)</h2>
+                <p class="text-muted mb-0">AsociaciÃ³n entre sensores fÃ­sicos y nombres de nodos lÃ³gicos.</p>
+              </div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <button @click="addNodo" class="btn-text btn-text--edit">+ AÃ±adir Nodo</button>
+                <button @click="configStore.saveNodos" class="btn-primary" :disabled="configStore.loading">
+                  {{ configStore.loading ? 'Enviando...' : 'Guardar Nodos' }}
+                </button>
+              </div>
+            </div>
+
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Sensor (Pos)</th>
+                  <th>Nombre</th>
+                  <th>Pos X</th>
+                  <th>Pos Y</th>
+                  <th>Pos Z</th>
+                  <th>AcciÃ³n</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(nodo, idx) in configStore.draftConfig.Gestor.Nodos" :key="idx">
+                  <td><input v-model.number="nodo.Sensor" type="number" class="form-input-sm" /></td>
+                  <td><input v-model="nodo.Nombre" type="text" class="form-input-sm" /></td>
+                  <td><input v-model.number="nodo.Posicion.x" type="number" class="form-input-sm" /></td>
+                  <td><input v-model.number="nodo.Posicion.y" type="number" class="form-input-sm" /></td>
+                  <td><input v-model.number="nodo.Posicion.z" type="number" class="form-input-sm" /></td>
+                  <td class="text-center">
+                    <button @click="removeNodo(idx)" class="btn-icon text-danger" title="Borrar Nodo">âœ•</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- SECCIÃ“N 3: DATAS (Gestor.Datas) -->
           <div v-else-if="activeMenu === 'datas'" class="fade-in">
             <div class="flex-between mb-4">
               <div>
@@ -1536,7 +1611,7 @@ const addStringToArray = (lista: string[], event: Event) => {
             </div>
           </div>
 
-          <!-- SECCIÃ“N 3: PROCESADO -->
+          <!-- SECCIÃ“N 4: PROCESADO -->
           <div v-else-if="activeMenu === 'procesado'" class="fade-in proc-layout">
             <div class="proc-sidebar">
               <button v-for="tab in ['Data', 'TA', 'FFT', 'OMA', 'FRF']" :key="tab" 
@@ -1579,15 +1654,34 @@ const addStringToArray = (lista: string[], event: Event) => {
 
                 <!-- Si eligen Manual -->
                 <div v-else-if="getProcMode((configStore.draftConfig as any)[activeProcTab].Canales) === 'manual'" class="fade-in config-box">
-                  <div class="tags-container mb-2">
-                    <span v-for="(ch, i) in (configStore.draftConfig as any)[activeProcTab].Canales" :key="i" class="badge-tag">
-                      {{ ch }} <button @click="(configStore.draftConfig as any)[activeProcTab].Canales.splice(i,1)" class="tag-close">âœ•</button>
-                    </span>
+                  <div class="grid-2-cols">
+                    <!-- Columna Canales -->
+                    <div>
+                      <label class="form-label">Canales FÃ­sicos</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(ch, i) in (configStore.draftConfig as any)[activeProcTab].Canales" :key="i" class="badge-tag">
+                          {{ ch }} <button @click="(configStore.draftConfig as any)[activeProcTab].Canales.splice(i,1)" class="tag-close">âœ•</button>
+                        </span>
+                      </div>
+                      <select @change="e => { if(!(configStore.draftConfig as any)[activeProcTab].Canales) (configStore.draftConfig as any)[activeProcTab].Canales = []; addStringToArray((configStore.draftConfig as any)[activeProcTab].Canales, e); }" class="form-select">
+                        <option value="">+ AÃ±adir Canal...</option>
+                        <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                      </select>
+                    </div>
+                    <!-- Columna Estados -->
+                    <div>
+                      <label class="form-label">Variables de Estado</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(st, i) in (configStore.draftConfig as any)[activeProcTab].Estados" :key="i" class="badge-tag state-tag">
+                          {{ st }} <button @click="(configStore.draftConfig as any)[activeProcTab].Estados.splice(i,1)" class="tag-close">âœ•</button>
+                        </span>
+                      </div>
+                      <select @change="e => { if(!(configStore.draftConfig as any)[activeProcTab].Estados) (configStore.draftConfig as any)[activeProcTab].Estados = []; addStringToArray((configStore.draftConfig as any)[activeProcTab].Estados, e); }" class="form-select">
+                        <option value="">+ AÃ±adir Estado...</option>
+                        <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                      </select>
+                    </div>
                   </div>
-                  <select @change="addStringToArray((configStore.draftConfig as any)[activeProcTab].Canales, $event)" class="form-select">
-                      <option value="">+ AÃ±adir Canal al Procesado...</option>
-                    <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                  </select>
                 </div>
               </div>
 
@@ -1643,12 +1737,27 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <option v-for="d in configStore.draftConfig.Gestor.Datas" :key="d.Nombre" :value="d.Nombre">Grupo: {{ d.Nombre }}</option>
                     </select>
                   </div>
-                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="tags-container">
-                    <span v-for="(ch, i) in omaGroup.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="omaGroup.Canales.splice(i,1)" class="tag-close">âœ•</button></span>
-                    <select @change="addStringToArray(omaGroup.Canales, $event)" class="form-select" style="max-width: 200px;">
-                        <option value="">+ AÃ±adir...</option>
-                      <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                    </select>
+                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="grid-2-cols mt-2">
+                    <div>
+                      <label class="form-label">Canales FÃ­sicos</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(ch, i) in omaGroup.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="omaGroup.Canales.splice(i,1)" class="tag-close">âœ•</button></span>
+                      </div>
+                      <select @change="e => { if(!omaGroup.Canales) omaGroup.Canales = []; addStringToArray(omaGroup.Canales, e); }" class="form-select">
+                        <option value="">+ AÃ±adir Canal...</option>
+                        <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="form-label">Variables de Estado</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(st, i) in omaGroup.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="omaGroup.Estados.splice(i,1)" class="tag-close">âœ•</button></span>
+                      </div>
+                      <select @change="e => { if(!omaGroup.Estados) omaGroup.Estados = []; addStringToArray(omaGroup.Estados, e); }" class="form-select">
+                        <option value="">+ AÃ±adir Estado...</option>
+                        <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <button @click="configStore.draftConfig!.OMA.OMAs.push({ Nombre: 'Nuevo', Canales: ['*'] })" class="btn-text btn-text--edit mt-2">+ AÃ±adir Grupo OMA</button>
@@ -1697,7 +1806,6 @@ const addStringToArray = (lista: string[], event: Event) => {
                 </div>
               </div>
 
-              <!-- ðŸ‘‡ AÃ‘ADIR CONFIGURACIÃ“N FRF AQUÃ ðŸ‘‡ -->
               <div v-if="activeProcTab === 'FRF' && configStore.draftConfig.FRF?.Config" class="config-box">
                 <h4>ConfiguraciÃ³n FRF</h4>
                 <div class="grid-2-cols mt-2">
@@ -1734,7 +1842,7 @@ const addStringToArray = (lista: string[], event: Event) => {
             </div>
           </div>
 
-          <!-- SECCIÃ“N 4: INFLUX DB -->
+          <!-- SECCIÃ“N 5: INFLUX DB -->
           <div v-else-if="activeMenu === 'influx'" class="fade-in">
             <h2 class="section-title">ConexiÃ³n InfluxDB</h2>
             <div class="grid-2-cols mb-4">
@@ -1944,6 +2052,7 @@ onMounted(() => {
       <button v-else @click="handleLogout" class="logout-button">Cerrar sesiÃ³n</button>
       <router-link to="/config">ConfiguraciÃ³n</router-link>
       <router-link to="/measures">Medidas</router-link>
+      <router-link to="/system">Sistema</router-link>
     </div>
 
     <DashboardPanel v-if="auth.isAuthenticated" />
@@ -2069,7 +2178,7 @@ button:disabled{
 </style>
 views\MeasuresView.vue:
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeasuresStore } from '@/stores/measureStore';
@@ -2093,6 +2202,23 @@ const modoFin = ref<'infinito' | 'fecha'>('infinito');
 // 2. Canales, ELIMINADA, las datas se cogen de las opciones en Gestor.Datas
 //const modoData = ref<'todos' | 'seleccion'>('todos');
 //const canalesSeleccionados = ref<string[]>([]);
+
+const modoData = ref<'todos' | 'conjunto' | 'manual'>('todos');
+const manualCanales = ref<string[]>([]);
+const manualEstados = ref<string[]>([]);
+
+const estadosDisponibles = computed(() => {
+  const arr: string[] = [];
+  authStore.sensoresUI.forEach(s => {
+    if (s.Estados && s.Estados.length > 0) {
+      s.Estados.forEach(e => {
+        const sufijo = e === 'Temperatura' ? 'T' : e === 'Humedad' ? 'H' : e;
+        arr.push(`${s.Nombre}.${sufijo}`);
+      });
+    }
+  });
+  return arr;
+});
 
 // 3. Intervalos
 interface IntervaloUI { valor: number; unidad: 'segundos' | 'minutos' | 'horas' }
@@ -2157,7 +2283,8 @@ const setProcMode = (mode: string, parent: any, key: string) => {
     const firstData = measuresStore.listaDatas[0] || '';
     parent[key] = [firstData];
   } else {
-    parent[key] = [];
+    parent.Canales = [];
+    parent.Estados = [];
   }
 };
 
@@ -2266,7 +2393,19 @@ const openEditPanel = (medida: MedidaItem) => {
   }
 
   // AÃ‘ADIR ESTO: Si viene vacÃ­o, forzamos el asterisco por seguridad
-  if (!formData.value.Data) formData.value.Data = '*';
+  if (!formData.value.Data || formData.value.Data === '*') {
+    modoData.value = 'todos';
+    manualCanales.value = [];
+  } else if (measuresStore.listaDatas.includes(formData.value.Data)) {
+    modoData.value = 'conjunto';
+    manualCanales.value = [];
+  } else {
+    modoData.value = 'manual';
+    const partes = formData.value.Data.split(',').map(s => s.trim());
+    // Separamos los estados (T, H, EMC) de los canales fÃ­sicos
+    manualEstados.value = partes.filter(p => p.endsWith('.T') || p.endsWith('.H') || p.endsWith('.EMC'));
+    manualCanales.value = partes.filter(p => !(p.endsWith('.T') || p.endsWith('.H') || p.endsWith('.EMC')));
+  }
 
   // Segundos a Intervalos con Unidades Humanas
   intervalosUI.value = (formData.value.Programacion.Intervalos || []).map(sec => {
@@ -2344,6 +2483,15 @@ const guardarFormulario = async () => {
 
   // 2. Reconstruir Canales, ELIMINADA las datas se cogen de Gestor.Datas
   //formData.value.Data = modoData.value === 'todos' ? '*' : canalesSeleccionados.value.join(', ');
+
+  // 2.5 Reconstruir Datos de la Medida (Data string)
+  if (modoData.value === 'todos') {
+    formData.value.Data = '*';
+  } else if (modoData.value === 'manual') {
+    const seleccionados = [...manualCanales.value, ...manualEstados.value];
+    formData.value.Data = seleccionados.length > 0 ? seleccionados.join(', ') : '*';
+  }
+  // Si es 'conjunto', el v-model del HTML ya lo ha guardado directamente en formData.value.Data
 
   // 3. Reconstruir Intervalos multiplicando a segundos
   formData.value.Programacion.Intervalos = intervalosUI.value.map(i => {
@@ -2437,14 +2585,47 @@ const handleEliminar = async (medida: MedidaItem) => {
           </div>
 
           <!-- Selector de conjunto de Datos (Gestor.Datas) -->
+          <!-- Selector de Datos de la Medida -->
           <div class="form-group mt-2">
-            <label class="form-label">Datos</label>
-            <select v-model="formData.Data" class="form-select">
-              <option value="*">Todos los canales (*)</option>
-              <option v-for="grupo in measuresStore.listaDatas" :key="grupo" :value="grupo">
-                Conjunto: {{ grupo }}
-              </option>
+            <label class="form-label">Datos (A guardar en la Medida)</label>
+            <select v-model="modoData" class="form-select mb-2">
+              <option value="todos">Todos los canales (*)</option>
+              <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
+              <option value="manual">SelecciÃ³n Manual</option>
             </select>
+
+            <!-- Si eligen conjunto -->
+            <div v-if="modoData === 'conjunto'" class="fade-in">
+              <select v-model="formData.Data" class="form-select">
+                <option v-for="grupo in measuresStore.listaDatas" :key="grupo" :value="grupo">Conjunto: {{ grupo }}</option>
+              </select>
+            </div>
+
+            <!-- Si eligen manual -->
+            <div v-else-if="modoData === 'manual'" class="fade-in config-box mt-2">
+              <div class="grid-2-cols">
+                <div>
+                  <label class="form-label">Canales FÃ­sicos</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(ch, i) in manualCanales" :key="i" class="badge-tag">{{ ch }} <button @click="manualCanales.splice(i,1)" class="tag-close">âœ•</button></span>
+                  </div>
+                  <select @change="addStringToArray(manualCanales, $event)" class="form-select">
+                    <option value="">+ AÃ±adir Canal...</option>
+                    <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">Estados</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(st, i) in manualEstados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="manualEstados.splice(i,1)" class="tag-close">âœ•</button></span>
+                  </div>
+                  <select @change="addStringToArray(manualEstados, $event)" class="form-select">
+                    <option value="">+ AÃ±adir Estado...</option>
+                    <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2732,16 +2913,29 @@ const handleEliminar = async (medida: MedidaItem) => {
               </div>
 
               <!-- Si eligen Manual -->
-              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" style="background: var(--color-bg-main); padding: 10px; border-radius: 6px; border: 1px dashed var(--color-input-border);">
-                <div class="tags-container mb-2">
-                  <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">
-                    {{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">âœ•</button>
-                  </span>
+              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" class="fade-in config-box mt-2">
+                <div class="grid-2-cols">
+                  <div>
+                    <label class="form-label">Canales FÃ­sicos</label>
+                    <div class="tags-container mb-2">
+                      <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">âœ•</button></span>
+                    </div>
+                    <select @change="e => { if(!tempProcConfig.Canales) tempProcConfig.Canales = []; addStringToArray(tempProcConfig.Canales, e); }" class="form-select">
+                      <option value="">+ AÃ±adir Canal...</option>
+                      <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label">Variables de Estado</label>
+                    <div class="tags-container mb-2">
+                      <span v-for="(st, i) in tempProcConfig.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="tempProcConfig.Estados.splice(i,1)" class="tag-close">âœ•</button></span>
+                    </div>
+                    <select @change="e => { if(!tempProcConfig.Estados) tempProcConfig.Estados = []; addStringToArray(tempProcConfig.Estados, e); }" class="form-select">
+                      <option value="">+ AÃ±adir Estado...</option>
+                      <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                    </select>
+                  </div>
                 </div>
-                <select @change="addStringToArray(tempProcConfig.Canales, $event)" class="form-select">
-                  <option value="">+ AÃ±adir Canal al Procesado...</option>
-                  <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                </select>
               </div>
             </div>
           </div>
@@ -3227,6 +3421,229 @@ const handleEliminar = async (medida: MedidaItem) => {
 .tag-close { background: none; border: none; color: white; cursor: pointer; font-weight: bold; padding: 0; opacity: 0.8; transition: opacity 0.2s; }
 .tag-close:hover { opacity: 1; color: #fca5a5; }
 
+</style>
+views\SystemView.vue:
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/api/axios';
+
+const auth = useAuthStore();
+const router = useRouter();
+let pollInterval: any = null;
+
+// Estados para los archivos seleccionados
+const configFile = ref<File | null>(null);
+const firmwareFile = ref<File | null>(null);
+
+const loadingMsg = ref('');
+
+onMounted(() => {
+  // ComprobaciÃ³n pasiva de sesiÃ³n
+  pollInterval = setInterval(async () => {
+    await auth.checkSession();
+    if (!auth.isAuthenticated) {
+      alert("Tu sesiÃ³n ha caducado por inactividad. SerÃ¡s redirigido al inicio de sesiÃ³n.");
+      router.push('/login');
+    }
+  }, 10000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+});
+
+// 1. DESCARGAR CONFIGURACIÃ“N ACTUAL
+const downloadConfig = async () => {
+  loadingMsg.value = 'Descargando configuraciÃ³n...';
+  try {
+    const res = await api.get('/remo/Config', { withCredentials: true });
+    // Formateamos el JSON con sangrÃ­as para que sea legible y lo preparamos como archivo de texto
+    const dataStr = JSON.stringify(res.data, null, 2);
+    const blob = new Blob([dataStr], { type: 'text/plain' });
+    
+    // Creamos un enlace temporal para forzar la descarga
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Config.txt';
+    a.click();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(error);
+    alert('Error al descargar la configuraciÃ³n del hardware.');
+  } finally {
+    loadingMsg.value = '';
+  }
+};
+
+// 2. SUBIR CONFIGURACIÃ“N DESDE FICHERO
+const uploadConfig = async () => {
+  if (!configFile.value) return;
+  
+  if (!confirm('Â¿EstÃ¡s seguro de que quieres sobrescribir toda la configuraciÃ³n del sistema con este fichero?')) return;
+
+  loadingMsg.value = 'Subiendo configuraciÃ³n...';
+  const reader = new FileReader();
+  
+  reader.onload = async (e) => {
+    try {
+      const fileContent = e.target?.result as string;
+      const jsonPayload = JSON.parse(fileContent); // Validamos que sea un JSON bien formado
+      
+      // Enviamos el JSON al endpoint de configuraciÃ³n
+      await api.post('/remo/Config', jsonPayload, { withCredentials: true });
+      alert('ConfiguraciÃ³n subida y aplicada correctamente.');
+      configFile.value = null; // Reseteamos el input
+    } catch (error) {
+      console.error(error);
+      alert('Error: El fichero seleccionado no contiene un formato JSON vÃ¡lido o el hardware rechazÃ³ la conexiÃ³n.');
+    } finally {
+      loadingMsg.value = '';
+    }
+  };
+  reader.readAsText(configFile.value);
+};
+
+// 3. REINICIAR DISPOSITIVO
+const rebootDevice = async () => {
+  if (!confirm('ATENCIÃ“N: Se va a reiniciar el dispositivo ReMo fÃ­sicamente. TardarÃ¡ unos 150 segundos en volver a estar disponible. Â¿Deseas continuar?')) return;
+
+  loadingMsg.value = 'Enviando orden de reinicio...';
+  try {
+    await api.post('/remo/Reset', {}, { withCredentials: true });
+    alert('Orden enviada. El sistema se estÃ¡ reiniciando. Por favor, espera 2 minutos y medio antes de intentar navegar de nuevo.');
+    // PodrÃ­amos expulsar al login directamente por precauciÃ³n
+    router.push('/login');
+  } catch (error) {
+    console.error(error);
+    alert('Error al intentar reiniciar el dispositivo.');
+  } finally {
+    loadingMsg.value = '';
+  }
+};
+
+// 4. ACTUALIZAR FIRMWARE
+const updateFirmware = async () => {
+  if (!firmwareFile.value) return;
+
+  if (!confirm('ATENCIÃ“N: Vas a actualizar el firmware del sistema. No apagues el dispositivo durante este proceso. Â¿Continuar?')) return;
+
+  loadingMsg.value = 'Subiendo e instalando firmware... Este proceso puede tardar.';
+  try {
+    // La documentaciÃ³n indica que el fichero se pasa "Como datos de la peticiÃ³n" directamente.
+    // Usamos 'application/octet-stream' genÃ©rico para enviar el archivo binario crudo.
+    await api.post('/remo/Firmware', firmwareFile.value, {
+      headers: { 'Content-Type': 'application/octet-stream' },
+      withCredentials: true
+    });
+    alert('Firmware enviado al dispositivo correctamente.');
+    firmwareFile.value = null;
+  } catch (error) {
+    console.error(error);
+    alert('Error al actualizar el firmware.');
+  } finally {
+    loadingMsg.value = '';
+  }
+};
+</script>
+
+<template>
+  <div class="app-container">
+    <main class="main-content">
+      <header class="page-header">
+        <div class="header-titles">
+          <h1 class="page-title">Mantenimiento del Sistema</h1>
+          <p class="page-subtitle">Operaciones crÃ­ticas, copias de seguridad y firmware</p>
+        </div>
+      </header>
+
+      <div class="config-content" style="padding-top: 20px;">
+        <div v-if="loadingMsg" class="loading-msg">{{ loadingMsg }}</div>
+
+        <div class="grid-2-cols" style="gap: 30px;">
+          
+          <!-- DESCARGAR CONFIGURACIÃ“N -->
+          <div class="config-box action-card">
+            <h3>â¬‡ï¸ Exportar ConfiguraciÃ³n</h3>
+            <p class="text-muted">Descarga todos los ajustes actuales del dispositivo en un archivo de texto (<code>Config.txt</code>) que contiene el JSON Ã­ntegro.</p>
+            <div class="action-footer">
+              <button @click="downloadConfig" class="btn-primary" :disabled="!!loadingMsg">
+                Descargar Config.txt
+              </button>
+            </div>
+          </div>
+
+          <!-- SUBIR CONFIGURACIÃ“N -->
+          <div class="config-box action-card">
+            <h3>â¬†ï¸ Importar ConfiguraciÃ³n</h3>
+            <p class="text-muted">Sube un archivo de configuraciÃ³n previamente descargado para sobrescribir los ajustes actuales del dispositivo.</p>
+            <input type="file" @change="e => configFile = (e.target as HTMLInputElement).files?.[0] || null" accept=".txt,.json" class="form-input mb-2" :disabled="!!loadingMsg" />
+            <div class="action-footer">
+              <button @click="uploadConfig" class="btn-primary" :disabled="!configFile || !!loadingMsg">
+                Aplicar al Dispositivo
+              </button>
+            </div>
+          </div>
+
+          <!-- REINICIAR -->
+          <div class="config-box action-card warning-card">
+            <h3>ðŸ”„ Reiniciar ReMo</h3>
+            <p class="text-muted">Fuerza un reinicio de la tarjeta hardware. El sistema dejarÃ¡ de responder y tardarÃ¡ aproximadamente 150 segundos en arrancar por completo.</p>
+            <div class="action-footer">
+              <button @click="rebootDevice" class="btn-danger" :disabled="!!loadingMsg">
+                Reiniciar Ahora
+              </button>
+            </div>
+          </div>
+
+          <!-- ACTUALIZAR FIRMWARE -->
+          <div class="config-box action-card warning-card">
+            <h3>âš™ï¸ Actualizar Firmware</h3>
+            <p class="text-muted">Sube un nuevo archivo de firmware al sistema. <strong>AtenciÃ³n:</strong> Un corte de energÃ­a durante este proceso puede daÃ±ar el equipo.</p>
+            <input type="file" @change="e => firmwareFile = (e.target as HTMLInputElement).files?.[0] || null" class="form-input mb-2" :disabled="!!loadingMsg" />
+            <div class="action-footer">
+              <button @click="updateFirmware" class="btn-danger" :disabled="!firmwareFile || !!loadingMsg">
+                Instalar Firmware
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+</template>
+
+<style scoped>
+/* Heredamos la estructura visual de ConfigurationView para mantener la estÃ©tica uniforme */
+.app-container { display: flex; min-height: 100vh; background-color: var(--color-bg-main); width: 100%; font-family: var(--font-family); color: var(--color-text-primary); justify-content: center; padding: 4rem 2rem; }
+.main-content { display: flex; flex-direction: column; width: 100%; max-width: 1000px; background-color: var(--color-bg-white); border-radius: 12px; border: 1px solid var(--color-border); box-shadow: 0 10px 25px rgba(0,0,0,0.05); overflow: hidden; }
+.page-header { position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 80px; padding: 0 2rem; border-bottom: 1px solid var(--color-border); background-color: var(--color-bg-main); }
+.header-titles { position: absolute; left: 50%; transform: translateX(-50%); text-align: center; }
+.page-title { font-size: 1.875rem; font-weight: 700; color: var(--color-text-title); margin: 0; }
+.page-subtitle { font-size: 0.875rem; color: var(--color-text-secondary); margin: 0.25rem 0 0 0; }
+.config-content { padding: 40px; }
+
+/* Utilidades Grid y Cajas */
+.grid-2-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.config-box { background-color: var(--color-bg-main); padding: 25px; border-radius: 8px; border: 1px solid var(--color-input-border); display: flex; flex-direction: column; justify-content: space-between; }
+.action-card h3 { margin-top: 0; margin-bottom: 10px; color: var(--color-text-title); font-weight: 700; font-size: 1.2rem; }
+.warning-card { border-color: #fca5a5; background-color: #fef2f2; }
+.warning-card h3 { color: var(--color-danger); }
+.text-muted { color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 20px; line-height: 1.5; }
+.action-footer { display: flex; justify-content: flex-end; margin-top: 15px; }
+
+/* Formularios y Botones */
+.form-input { width: 100%; border-radius: 6px; border: 1px solid var(--color-input-border); padding: 10px; font-size: 0.9rem; background-color: var(--color-bg-white); }
+.mb-2 { margin-bottom: 1rem; }
+.btn-primary { background-color: var(--color-primary); color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+.btn-primary:hover:not(:disabled) { background-color: var(--color-primary-hover); }
+.btn-danger { background-color: var(--color-danger); color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+.btn-danger:hover:not(:disabled) { background-color: var(--color-danger-hover); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.loading-msg { padding: 20px; text-align: center; font-weight: bold; margin-bottom: 20px; color: var(--color-primary); background: #eff6ff; border-radius: 8px; border: 1px dashed var(--color-primary); }
 </style>
 App.vue:
 <script setup lang="ts">

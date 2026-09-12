@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 import { useMeasuresStore } from '@/stores/measureStore';
@@ -23,6 +23,23 @@ const modoFin = ref<'infinito' | 'fecha'>('infinito');
 // 2. Canales, ELIMINADA, las datas se cogen de las opciones en Gestor.Datas
 //const modoData = ref<'todos' | 'seleccion'>('todos');
 //const canalesSeleccionados = ref<string[]>([]);
+
+const modoData = ref<'todos' | 'conjunto' | 'manual'>('todos');
+const manualCanales = ref<string[]>([]);
+const manualEstados = ref<string[]>([]);
+
+const estadosDisponibles = computed(() => {
+  const arr: string[] = [];
+  authStore.sensoresUI.forEach(s => {
+    if (s.Estados && s.Estados.length > 0) {
+      s.Estados.forEach(e => {
+        const sufijo = e === 'Temperatura' ? 'T' : e === 'Humedad' ? 'H' : e;
+        arr.push(`${s.Nombre}.${sufijo}`);
+      });
+    }
+  });
+  return arr;
+});
 
 // 3. Intervalos
 interface IntervaloUI { valor: number; unidad: 'segundos' | 'minutos' | 'horas' }
@@ -87,7 +104,8 @@ const setProcMode = (mode: string, parent: any, key: string) => {
     const firstData = measuresStore.listaDatas[0] || '';
     parent[key] = [firstData];
   } else {
-    parent[key] = [];
+    parent.Canales = [];
+    parent.Estados = [];
   }
 };
 
@@ -196,7 +214,19 @@ const openEditPanel = (medida: MedidaItem) => {
   }
 
   // AÑADIR ESTO: Si viene vacío, forzamos el asterisco por seguridad
-  if (!formData.value.Data) formData.value.Data = '*';
+  if (!formData.value.Data || formData.value.Data === '*') {
+    modoData.value = 'todos';
+    manualCanales.value = [];
+  } else if (measuresStore.listaDatas.includes(formData.value.Data)) {
+    modoData.value = 'conjunto';
+    manualCanales.value = [];
+  } else {
+    modoData.value = 'manual';
+    const partes = formData.value.Data.split(',').map(s => s.trim());
+    // Separamos los estados (T, H, EMC) de los canales físicos
+    manualEstados.value = partes.filter(p => p.endsWith('.T') || p.endsWith('.H') || p.endsWith('.EMC'));
+    manualCanales.value = partes.filter(p => !(p.endsWith('.T') || p.endsWith('.H') || p.endsWith('.EMC')));
+  }
 
   // Segundos a Intervalos con Unidades Humanas
   intervalosUI.value = (formData.value.Programacion.Intervalos || []).map(sec => {
@@ -274,6 +304,15 @@ const guardarFormulario = async () => {
 
   // 2. Reconstruir Canales, ELIMINADA las datas se cogen de Gestor.Datas
   //formData.value.Data = modoData.value === 'todos' ? '*' : canalesSeleccionados.value.join(', ');
+
+  // 2.5 Reconstruir Datos de la Medida (Data string)
+  if (modoData.value === 'todos') {
+    formData.value.Data = '*';
+  } else if (modoData.value === 'manual') {
+    const seleccionados = [...manualCanales.value, ...manualEstados.value];
+    formData.value.Data = seleccionados.length > 0 ? seleccionados.join(', ') : '*';
+  }
+  // Si es 'conjunto', el v-model del HTML ya lo ha guardado directamente en formData.value.Data
 
   // 3. Reconstruir Intervalos multiplicando a segundos
   formData.value.Programacion.Intervalos = intervalosUI.value.map(i => {
@@ -367,14 +406,47 @@ const handleEliminar = async (medida: MedidaItem) => {
           </div>
 
           <!-- Selector de conjunto de Datos (Gestor.Datas) -->
+          <!-- Selector de Datos de la Medida -->
           <div class="form-group mt-2">
-            <label class="form-label">Datos</label>
-            <select v-model="formData.Data" class="form-select">
-              <option value="*">Todos los canales (*)</option>
-              <option v-for="grupo in measuresStore.listaDatas" :key="grupo" :value="grupo">
-                Conjunto: {{ grupo }}
-              </option>
+            <label class="form-label">Datos (A guardar en la Medida)</label>
+            <select v-model="modoData" class="form-select mb-2">
+              <option value="todos">Todos los canales (*)</option>
+              <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
+              <option value="manual">Selección Manual</option>
             </select>
+
+            <!-- Si eligen conjunto -->
+            <div v-if="modoData === 'conjunto'" class="fade-in">
+              <select v-model="formData.Data" class="form-select">
+                <option v-for="grupo in measuresStore.listaDatas" :key="grupo" :value="grupo">Conjunto: {{ grupo }}</option>
+              </select>
+            </div>
+
+            <!-- Si eligen manual -->
+            <div v-else-if="modoData === 'manual'" class="fade-in config-box mt-2">
+              <div class="grid-2-cols">
+                <div>
+                  <label class="form-label">Canales Físicos</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(ch, i) in manualCanales" :key="i" class="badge-tag">{{ ch }} <button @click="manualCanales.splice(i,1)" class="tag-close">✕</button></span>
+                  </div>
+                  <select @change="addStringToArray(manualCanales, $event)" class="form-select">
+                    <option value="">+ Añadir Canal...</option>
+                    <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="form-label">Estados</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(st, i) in manualEstados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="manualEstados.splice(i,1)" class="tag-close">✕</button></span>
+                  </div>
+                  <select @change="addStringToArray(manualEstados, $event)" class="form-select">
+                    <option value="">+ Añadir Estado...</option>
+                    <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -662,16 +734,29 @@ const handleEliminar = async (medida: MedidaItem) => {
               </div>
 
               <!-- Si eligen Manual -->
-              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" style="background: var(--color-bg-main); padding: 10px; border-radius: 6px; border: 1px dashed var(--color-input-border);">
-                <div class="tags-container mb-2">
-                  <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">
-                    {{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">✕</button>
-                  </span>
+              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" class="fade-in config-box mt-2">
+                <div class="grid-2-cols">
+                  <div>
+                    <label class="form-label">Canales Físicos</label>
+                    <div class="tags-container mb-2">
+                      <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">✕</button></span>
+                    </div>
+                    <select @change="e => { if(!tempProcConfig.Canales) tempProcConfig.Canales = []; addStringToArray(tempProcConfig.Canales, e); }" class="form-select">
+                      <option value="">+ Añadir Canal...</option>
+                      <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label">Variables de Estado</label>
+                    <div class="tags-container mb-2">
+                      <span v-for="(st, i) in tempProcConfig.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="tempProcConfig.Estados.splice(i,1)" class="tag-close">✕</button></span>
+                    </div>
+                    <select @change="e => { if(!tempProcConfig.Estados) tempProcConfig.Estados = []; addStringToArray(tempProcConfig.Estados, e); }" class="form-select">
+                      <option value="">+ Añadir Estado...</option>
+                      <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                    </select>
+                  </div>
                 </div>
-                <select @change="addStringToArray(tempProcConfig.Canales, $event)" class="form-select">
-                  <option value="">+ Añadir Canal al Procesado...</option>
-                  <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                </select>
               </div>
             </div>
           </div>

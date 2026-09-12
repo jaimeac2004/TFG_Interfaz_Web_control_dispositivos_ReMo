@@ -107,6 +107,31 @@ export const useConfigStore = defineStore('config', {
       } finally {
         this.loading = false
       }
+    },
+    async saveNodos() {
+      if (!this.draftConfig) return;
+      this.loading = true; this.error = ''; this.successMsg = '';
+
+      try {
+        const nodosPayload = JSON.parse(JSON.stringify(this.draftConfig.Gestor.Nodos));
+        if (Array.isArray(nodosPayload)) {
+          nodosPayload.sort((a: any, b: any) => a.Sensor - b.Sensor);
+        }
+
+        // Endpoint específico según la documentación: POST /remo/Nodos
+        await api.post('/remo/Nodos', nodosPayload, { withCredentials: true });
+        
+        // 👇 AÑADIDO: Recargar la configuración para reflejar los cambios globales en el backend 👇
+        await this.fetchConfig();
+        
+        this.successMsg = "Nodos lógicos actualizados correctamente en el hardware.";
+      } catch (err) {
+        console.error("Error al enviar los nodos:", err);
+        this.error = "Error al actualizar los nodos en el hardware.";
+        throw err;
+      } finally {
+        this.loading = false;
+      }
     }
   }
 })

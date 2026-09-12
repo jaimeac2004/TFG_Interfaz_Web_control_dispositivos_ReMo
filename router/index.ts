@@ -3,13 +3,21 @@ import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import ConfigView from '@/views/ConfigurationView.vue'
 import MeasuresView from '@/views/MeasuresView.vue'
+import SystemView from '@/views/SystemView.vue'
 import { useAuthStore } from '@/stores/authStore'
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/',      name: 'home',   component: HomeView },
-    { path: '/login', name: 'login',  component: LoginView },
+    { path: '/',
+      name: 'home',
+      component: HomeView, 
+      meta: { requiresAuth: true } 
+    },
+    { path: '/login',
+      name: 'login',
+      component: LoginView
+    },
     { 
       path: '/config',
       name: 'config',
@@ -21,6 +29,12 @@ const router = createRouter({
       name: 'measures',
       component: MeasuresView,
       meta: { requiresAuth: true}
+    },
+    {
+      path: '/system',
+      name: 'system',
+      component: SystemView,
+      meta: { requiresAuth: true }
     }
   ]
 })

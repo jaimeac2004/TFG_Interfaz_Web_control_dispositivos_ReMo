@@ -1,19 +1,35 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 
 const auth = useAuthStore();
 const configStore = useConfigStore();
+const router = useRouter();
+let pollInterval: any = null;
 
 // --- ESTADOS DE LA UI ---
-const activeMenu = ref<'global' | 'datas' | 'procesado' | 'influx'>('global');
+const activeMenu = ref<'global' | 'nodos' | 'datas' | 'procesado' | 'influx'>('global');
 const activeProcTab = ref<'Data' | 'TA' | 'FFT' | 'OMA' | 'FRF'>('Data');
 const showConfirmModal = ref(false);
 
 onMounted(() => {
   configStore.fetchConfig();
   auth.fetchDashboardData();
+
+  // Comprobación pasiva: Solo mira si seguimos logueados, NUNCA recarga la configuración
+  pollInterval = setInterval(async () => {
+    await auth.checkSession();
+    if (!auth.isAuthenticated) {
+      alert("Tu sesión ha caducado por inactividad. Serás redirigido al inicio de sesión.");
+      router.push('/login');
+    }
+  }, 10000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
 });
 
 // --- COMPUTADOS ---
@@ -73,7 +89,8 @@ const setProcMode = (mode: string, parent: any, key: string) => {
     const firstData = configStore.draftConfig?.Gestor.Datas[0]?.Nombre || '';
     parent[key] = [firstData];
   } else {
-    parent[key] = [];
+    parent.Canales = [];
+    parent.Estados = [];
   }
 };
 
@@ -102,14 +119,6 @@ const addStringToArray = (lista: string[], event: Event) => {
           <h1 class="page-title">Configuración del Sistema (ReMo)</h1>
           <p class="page-subtitle">Parámetros globales, hardware y procesado</p>
         </div>
-        <div class="header-actions">
-          <button @click="handleCancel" class="btn-secondary" :disabled="configStore.loading">
-            Cancelar Cambios
-          </button>
-          <button @click="handleSaveClick" class="btn-primary" :disabled="configStore.loading">
-            {{ configStore.loading ? 'Enviando...' : 'Guardar Configuración' }}
-          </button>
-        </div>
       </header>
 
       <!-- MENSAJES DE ESTADO -->
@@ -123,20 +132,33 @@ const addStringToArray = (lista: string[], event: Event) => {
       <!-- LAYOUT DIVIDIDO -->
       <div v-else-if="configStore.draftConfig" class="config-layout">
         
-        <!-- SIDEBAR DE SECCIONES (Pegado a la izquierda) -->
+        <!-- SIDEBAR DE SECCIONES -->
         <aside class="config-sidebar">
           <button :class="['nav-btn', { active: activeMenu === 'global' }]" @click="activeMenu = 'global'">
             1. Global y Hardware
           </button>
+          <button :class="['nav-btn', { active: activeMenu === 'nodos' }]" @click="activeMenu = 'nodos'">
+            2. Nodos Lógicos
+          </button>
           <button :class="['nav-btn', { active: activeMenu === 'datas' }]" @click="activeMenu = 'datas'">
-            2. Conjuntos de Datos
+            3. Conjuntos de Datos
           </button>
           <button :class="['nav-btn', { active: activeMenu === 'procesado' }]" @click="activeMenu = 'procesado'">
-            3. Procesamiento
+            4. Procesamiento
           </button>
           <button :class="['nav-btn', { active: activeMenu === 'influx' }]" @click="activeMenu = 'influx'">
-            4. InfluxDB
+            5. InfluxDB
           </button>
+          <!-- BOTONES DE GUARDAR CANCELAR CAMBIOS EN LA CONFIGURACION -->
+          <div style="margin-top: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--color-border); background-color: var(--color-bg-main);">
+            <button @click="handleSaveClick" class="btn-primary" :disabled="configStore.loading" style="width: 100%;">
+              {{ configStore.loading ? 'Enviando...' : 'Guardar Configuración' }}
+            </button>
+            <button @click="handleCancel" class="btn-secondary" :disabled="configStore.loading" style="width: 100%;">
+              Cancelar Cambios
+            </button>
+          </div>
+          
         </aside>
 
         <!-- PANEL DE CONTENIDO DINÁMICO -->
@@ -154,26 +176,6 @@ const addStringToArray = (lista: string[], event: Event) => {
                 <option :value="4000">4000 Hz</option>
               </select>
             </div>
-
-            <hr class="divider" />
-            
-            <div class="flex-between mt-4 mb-2">
-              <h2 class="section-title mb-0">Nodos Lógicos (Gestor.Nodos)</h2>
-              <button @click="addNodo" class="btn-text btn-text--edit">+ Añadir Nodo</button>
-            </div>
-            <table class="data-table">
-              <thead><tr><th>Sensor (Pos)</th><th>Nombre</th><th>Pos X</th><th>Pos Y</th><th>Pos Z</th><th>Acción</th></tr></thead>
-              <tbody>
-                <tr v-for="(nodo, idx) in configStore.draftConfig.Gestor.Nodos" :key="idx">
-                  <td><input v-model.number="nodo.Sensor" type="number" class="form-input-sm" /></td>
-                  <td><input v-model="nodo.Nombre" type="text" class="form-input-sm" /></td>
-                  <td><input v-model.number="nodo.Posicion.x" type="number" class="form-input-sm" /></td>
-                  <td><input v-model.number="nodo.Posicion.y" type="number" class="form-input-sm" /></td>
-                  <td><input v-model.number="nodo.Posicion.z" type="number" class="form-input-sm" /></td>
-                  <td class="text-center"><button @click="removeNodo(idx)" class="btn-icon text-danger" title="Borrar Nodo">✕</button></td>
-                </tr>
-              </tbody>
-            </table>
 
             <hr class="divider mt-4" />
 
@@ -261,7 +263,48 @@ const addStringToArray = (lista: string[], event: Event) => {
             </table>
           </div>
 
-          <!-- SECCIÓN 2: DATAS (Gestor.Datas) -->
+          <!-- SECCIÓN 2: NODOS LÓGICOS (Gestor.Nodos) -->
+          <div v-else-if="activeMenu === 'nodos'" class="fade-in">
+            <div class="flex-between mb-4" style="border-bottom: 2px solid var(--color-border); padding-bottom: 8px;">
+              <div>
+                <h2 class="section-title mb-0" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">Nodos Lógicos (Gestor.Nodos)</h2>
+                <p class="text-muted mb-0">Asociación entre sensores físicos y nombres de nodos lógicos.</p>
+              </div>
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <button @click="addNodo" class="btn-text btn-text--edit">+ Añadir Nodo</button>
+                <button @click="configStore.saveNodos" class="btn-primary" :disabled="configStore.loading">
+                  {{ configStore.loading ? 'Enviando...' : 'Guardar Nodos' }}
+                </button>
+              </div>
+            </div>
+
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Sensor (Pos)</th>
+                  <th>Nombre</th>
+                  <th>Pos X</th>
+                  <th>Pos Y</th>
+                  <th>Pos Z</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(nodo, idx) in configStore.draftConfig.Gestor.Nodos" :key="idx">
+                  <td><input v-model.number="nodo.Sensor" type="number" class="form-input-sm" /></td>
+                  <td><input v-model="nodo.Nombre" type="text" class="form-input-sm" /></td>
+                  <td><input v-model.number="nodo.Posicion.x" type="number" class="form-input-sm" /></td>
+                  <td><input v-model.number="nodo.Posicion.y" type="number" class="form-input-sm" /></td>
+                  <td><input v-model.number="nodo.Posicion.z" type="number" class="form-input-sm" /></td>
+                  <td class="text-center">
+                    <button @click="removeNodo(idx)" class="btn-icon text-danger" title="Borrar Nodo">✕</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- SECCIÓN 3: DATAS (Gestor.Datas) -->
           <div v-else-if="activeMenu === 'datas'" class="fade-in">
             <div class="flex-between mb-4">
               <div>
@@ -314,7 +357,7 @@ const addStringToArray = (lista: string[], event: Event) => {
             </div>
           </div>
 
-          <!-- SECCIÓN 3: PROCESADO -->
+          <!-- SECCIÓN 4: PROCESADO -->
           <div v-else-if="activeMenu === 'procesado'" class="fade-in proc-layout">
             <div class="proc-sidebar">
               <button v-for="tab in ['Data', 'TA', 'FFT', 'OMA', 'FRF']" :key="tab" 
@@ -357,15 +400,34 @@ const addStringToArray = (lista: string[], event: Event) => {
 
                 <!-- Si eligen Manual -->
                 <div v-else-if="getProcMode((configStore.draftConfig as any)[activeProcTab].Canales) === 'manual'" class="fade-in config-box">
-                  <div class="tags-container mb-2">
-                    <span v-for="(ch, i) in (configStore.draftConfig as any)[activeProcTab].Canales" :key="i" class="badge-tag">
-                      {{ ch }} <button @click="(configStore.draftConfig as any)[activeProcTab].Canales.splice(i,1)" class="tag-close">✕</button>
-                    </span>
+                  <div class="grid-2-cols">
+                    <!-- Columna Canales -->
+                    <div>
+                      <label class="form-label">Canales Físicos</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(ch, i) in (configStore.draftConfig as any)[activeProcTab].Canales" :key="i" class="badge-tag">
+                          {{ ch }} <button @click="(configStore.draftConfig as any)[activeProcTab].Canales.splice(i,1)" class="tag-close">✕</button>
+                        </span>
+                      </div>
+                      <select @change="e => { if(!(configStore.draftConfig as any)[activeProcTab].Canales) (configStore.draftConfig as any)[activeProcTab].Canales = []; addStringToArray((configStore.draftConfig as any)[activeProcTab].Canales, e); }" class="form-select">
+                        <option value="">+ Añadir Canal...</option>
+                        <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                      </select>
+                    </div>
+                    <!-- Columna Estados -->
+                    <div>
+                      <label class="form-label">Variables de Estado</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(st, i) in (configStore.draftConfig as any)[activeProcTab].Estados" :key="i" class="badge-tag state-tag">
+                          {{ st }} <button @click="(configStore.draftConfig as any)[activeProcTab].Estados.splice(i,1)" class="tag-close">✕</button>
+                        </span>
+                      </div>
+                      <select @change="e => { if(!(configStore.draftConfig as any)[activeProcTab].Estados) (configStore.draftConfig as any)[activeProcTab].Estados = []; addStringToArray((configStore.draftConfig as any)[activeProcTab].Estados, e); }" class="form-select">
+                        <option value="">+ Añadir Estado...</option>
+                        <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                      </select>
+                    </div>
                   </div>
-                  <select @change="addStringToArray((configStore.draftConfig as any)[activeProcTab].Canales, $event)" class="form-select">
-                      <option value="">+ Añadir Canal al Procesado...</option>
-                    <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                  </select>
                 </div>
               </div>
 
@@ -421,12 +483,27 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <option v-for="d in configStore.draftConfig.Gestor.Datas" :key="d.Nombre" :value="d.Nombre">Grupo: {{ d.Nombre }}</option>
                     </select>
                   </div>
-                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="tags-container">
-                    <span v-for="(ch, i) in omaGroup.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="omaGroup.Canales.splice(i,1)" class="tag-close">✕</button></span>
-                    <select @change="addStringToArray(omaGroup.Canales, $event)" class="form-select" style="max-width: 200px;">
-                        <option value="">+ Añadir...</option>
-                      <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                    </select>
+                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="grid-2-cols mt-2">
+                    <div>
+                      <label class="form-label">Canales Físicos</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(ch, i) in omaGroup.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="omaGroup.Canales.splice(i,1)" class="tag-close">✕</button></span>
+                      </div>
+                      <select @change="e => { if(!omaGroup.Canales) omaGroup.Canales = []; addStringToArray(omaGroup.Canales, e); }" class="form-select">
+                        <option value="">+ Añadir Canal...</option>
+                        <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="form-label">Variables de Estado</label>
+                      <div class="tags-container mb-2">
+                        <span v-for="(st, i) in omaGroup.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="omaGroup.Estados.splice(i,1)" class="tag-close">✕</button></span>
+                      </div>
+                      <select @change="e => { if(!omaGroup.Estados) omaGroup.Estados = []; addStringToArray(omaGroup.Estados, e); }" class="form-select">
+                        <option value="">+ Añadir Estado...</option>
+                        <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <button @click="configStore.draftConfig!.OMA.OMAs.push({ Nombre: 'Nuevo', Canales: ['*'] })" class="btn-text btn-text--edit mt-2">+ Añadir Grupo OMA</button>
@@ -475,7 +552,6 @@ const addStringToArray = (lista: string[], event: Event) => {
                 </div>
               </div>
 
-              <!-- 👇 AÑADIR CONFIGURACIÓN FRF AQUÍ 👇 -->
               <div v-if="activeProcTab === 'FRF' && configStore.draftConfig.FRF?.Config" class="config-box">
                 <h4>Configuración FRF</h4>
                 <div class="grid-2-cols mt-2">
@@ -512,7 +588,7 @@ const addStringToArray = (lista: string[], event: Event) => {
             </div>
           </div>
 
-          <!-- SECCIÓN 4: INFLUX DB -->
+          <!-- SECCIÓN 5: INFLUX DB -->
           <div v-else-if="activeMenu === 'influx'" class="fade-in">
             <h2 class="section-title">Conexión InfluxDB</h2>
             <div class="grid-2-cols mb-4">
