@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
+import axios from 'axios';
 
 const auth = useAuthStore();
 const configStore = useConfigStore();
@@ -94,6 +95,21 @@ const setProcMode = (mode: string, parent: any, key: string) => {
   }
 };
 
+// --- UTILIDADES DE CALIBRACIÓN ---
+const updateCalibracionArray = (cal: any, key: 'Gains' | 'Offsets', value: string, defaultVal: number) => {
+  // Si el usuario borra todo, restauramos el valor por defecto
+  if (!value.trim()) {
+    cal[key] = [defaultVal];
+    return;
+  }
+  // Separamos por comas, eliminamos espacios, convertimos a número y descartamos letras/símbolos raros
+  const arr = value.split(',')
+    .map(item => Number(item.trim()))
+    .filter(n => !isNaN(n));
+    
+  cal[key] = arr.length > 0 ? arr : [defaultVal];
+};
+
 // --- UTILIDADES PARA LISTAS DESPLEGABLES ---
 const addStringToArray = (lista: string[], event: Event) => {
   const target = event.target as HTMLSelectElement | null;
@@ -102,6 +118,56 @@ const addStringToArray = (lista: string[], event: Event) => {
       lista.push(target.value);
     }
     target.value = ''; // Resetea el desplegable
+  }
+};
+
+// --- COMPROBAR CONEXIÓN INFLUXDB ---
+const testInfluxConnection = async () => {
+  const dbConfig = configStore.draftConfig?.InfluxDB?.DB;
+  
+  if (!dbConfig || !dbConfig.Servidor || !dbConfig.Token || !dbConfig.OrgID || !dbConfig.Bucket) {
+    alert("Por favor, rellena todos los campos (Servidor, Token, OrgID, Bucket) antes de comprobar la conexión.");
+    return;
+  }
+
+  // Limpiamos la URL por si el usuario pone una barra al final
+  let serverUrl = dbConfig.Servidor.trim();
+  if (serverUrl.endsWith('/')) serverUrl = serverUrl.slice(0, -1);
+
+  // Formateamos la petición exacta de la documentación
+  const url = `${serverUrl}/api/v2/buckets?name=${encodeURIComponent(dbConfig.Bucket.trim())}&orgID=${encodeURIComponent(dbConfig.OrgID.trim())}`;
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': `Bearer ${dbConfig.Token.trim()}`
+      }
+    });
+
+    // Validamos la respuesta exitosa
+    if (response.data && response.data.buckets && response.data.buckets.length > 0) {
+      alert("Conexión exitosa. El bucket y la organización son correctos.");
+    } else if (response.data && response.data.code === 'not found') {
+      // Por si InfluxDB devuelve 200 OK pero con el formato de 'not found'
+      alert(`Error: ${response.data.message}`);
+    } else {
+      alert("Error: Respuesta inesperada del servidor InfluxDB.");
+    }
+  } catch (error: any) {
+    // Si la promesa falla (error 4xx o 5xx)
+    if (error.response) {
+      if (error.response.status === 401) {
+        alert("Error de autenticación: El Token no es válido (401 Unauthorized).");
+      } else if (error.response.status === 404 || (error.response.data && error.response.data.code === 'not found')) {
+        const msg = error.response.data?.message || `No existe el Bucket "${dbConfig.Bucket}" en la Organización indicada (404 Not Found).`;
+        alert(`Error: ${msg}`);
+      } else {
+        alert(`Error del servidor InfluxDB: ${error.response.status} - ${error.response.statusText}`);
+      }
+    } else {
+      // Error de CORS o de Red (el servidor no existe)
+      alert("Error de red: No se pudo conectar. Verifica que la URL del Servidor sea correcta y esté accesible.");
+    }
   }
 };
 
@@ -244,7 +310,7 @@ const addStringToArray = (lista: string[], event: Event) => {
               <button @click="addCalibracion" class="btn-text btn-text--edit">+ Añadir Calibración</button>
             </div>
             <table class="data-table">
-              <thead><tr><th>Sensor</th><th>Gains (JSON Array)</th><th>Offsets (JSON Array)</th><th>Acción</th></tr></thead>
+              <thead><tr><th>Sensor</th><th>Gains</th><th>Offsets</th><th>Acción</th></tr></thead>
               <tbody>
                 <tr v-for="(cal, idx) in configStore.draftConfig.ATHAD.Calibracion" :key="idx">
                   <td class="text-center">
@@ -252,10 +318,18 @@ const addStringToArray = (lista: string[], event: Event) => {
                     <div v-if="cal.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                   </td>
                   <td>
-                    <input :value="JSON.stringify(cal.Gains)" @change="e => cal.Gains = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                    <!-- Gains: Separados por comas, quitamos corchetes visuales -->
+                    <input :value="cal.Gains ? cal.Gains.join(', ') : ''" 
+                           @change="e => updateCalibracionArray(cal, 'Gains', (e.target as HTMLInputElement).value, 1.0)" 
+                           type="text" class="form-input-sm" 
+                           title="Valores separados por comas (usa el punto para los decimales)" placeholder="1.0" />
                   </td>
                   <td>
-                    <input :value="JSON.stringify(cal.Offsets)" @change="e => cal.Offsets = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                    <!-- Offsets: Separados por comas, quitamos corchetes visuales -->
+                    <input :value="cal.Offsets ? cal.Offsets.join(', ') : ''" 
+                           @change="e => updateCalibracionArray(cal, 'Offsets', (e.target as HTMLInputElement).value, 0.0)" 
+                           type="text" class="form-input-sm" 
+                           title="Valores separados por comas (usa el punto para los decimales)" placeholder="0.0" />
                   </td>
                   <td class="text-center"><button @click="removeCalibracion(idx)" class="btn-icon text-danger">✕</button></td>
                 </tr>
@@ -400,7 +474,7 @@ const addStringToArray = (lista: string[], event: Event) => {
 
                 <!-- Si eligen Manual -->
                 <div v-else-if="getProcMode((configStore.draftConfig as any)[activeProcTab].Canales) === 'manual'" class="fade-in config-box">
-                  <div class="grid-2-cols">
+                  <div :class="{'grid-2-cols': activeProcTab === 'TA'}">
                     <!-- Columna Canales -->
                     <div>
                       <label class="form-label">Canales Físicos</label>
@@ -414,8 +488,8 @@ const addStringToArray = (lista: string[], event: Event) => {
                         <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
                       </select>
                     </div>
-                    <!-- Columna Estados -->
-                    <div>
+                    <!-- Columna Estados (Solo se muestra para TA) -->
+                    <div v-if="activeProcTab === 'TA'">
                       <label class="form-label">Variables de Estado</label>
                       <div class="tags-container mb-2">
                         <span v-for="(st, i) in (configStore.draftConfig as any)[activeProcTab].Estados" :key="i" class="badge-tag state-tag">
@@ -483,7 +557,7 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <option v-for="d in configStore.draftConfig.Gestor.Datas" :key="d.Nombre" :value="d.Nombre">Grupo: {{ d.Nombre }}</option>
                     </select>
                   </div>
-                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="grid-2-cols mt-2">
+                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="mt-2">
                     <div>
                       <label class="form-label">Canales Físicos</label>
                       <div class="tags-container mb-2">
@@ -492,16 +566,6 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <select @change="e => { if(!omaGroup.Canales) omaGroup.Canales = []; addStringToArray(omaGroup.Canales, e); }" class="form-select">
                         <option value="">+ Añadir Canal...</option>
                         <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="form-label">Variables de Estado</label>
-                      <div class="tags-container mb-2">
-                        <span v-for="(st, i) in omaGroup.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="omaGroup.Estados.splice(i,1)" class="tag-close">✕</button></span>
-                      </div>
-                      <select @change="e => { if(!omaGroup.Estados) omaGroup.Estados = []; addStringToArray(omaGroup.Estados, e); }" class="form-select">
-                        <option value="">+ Añadir Estado...</option>
-                        <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
                       </select>
                     </div>
                   </div>
@@ -597,6 +661,12 @@ const addStringToArray = (lista: string[], event: Event) => {
               <div class="form-group"><label class="form-label">Organization ID</label><input v-model="configStore.draftConfig.InfluxDB.DB.OrgID" type="text" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Bucket</label><input v-model="configStore.draftConfig.InfluxDB.DB.Bucket" type="text" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Reintentos de Conexión</label><input v-model.number="configStore.draftConfig.InfluxDB.Reintentos" type="number" class="form-input" /></div>
+              <div class="flex-between mb-4" style="background: var(--color-bg-main); padding: 15px; border-radius: 8px; border: 1px solid var(--color-border);">
+                <p class="text-muted mb-0">Comprueba que las credenciales de InfluxDB sean válidas antes de guardar la configuración.</p>
+                <button @click="testInfluxConnection" class="btn-secondary" type="button">
+                  Comprobar Conexión
+                </button>
+              </div>
             </div>
 
             <hr class="divider mt-4 mb-4" />

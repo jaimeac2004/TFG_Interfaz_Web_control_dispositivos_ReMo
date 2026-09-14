@@ -679,8 +679,15 @@ import { useAuthStore } from '@/stores/authStore'
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/',      name: 'home',   component: HomeView },
-    { path: '/login', name: 'login',  component: LoginView },
+    { path: '/',
+      name: 'home',
+      component: HomeView, 
+      meta: { requiresAuth: true } 
+    },
+    { path: '/login',
+      name: 'login',
+      component: LoginView
+    },
     { 
       path: '/config',
       name: 'config',
@@ -967,6 +974,34 @@ export const useConfigStore = defineStore('config', {
           delete payload.Gestor.Medidas;
         }
 
+        if (payload.ATHAD && Array.isArray(payload.ATHAD.Calibracion)) {
+          payload.ATHAD.Calibracion.forEach((cal: any) => {
+            // Asegurar Gains
+            if (!Array.isArray(cal.Gains)) {
+              const val = Number(cal.Gains);
+              cal.Gains = isNaN(val) ? [1.0] : [val];
+            } else {
+              cal.Gains = cal.Gains.map((n: any) => isNaN(Number(n)) ? 1.0 : Number(n));
+            }
+            // Asegurar Offsets
+            if (!Array.isArray(cal.Offsets)) {
+              const val = Number(cal.Offsets);
+              cal.Offsets = isNaN(val) ? [0.0] : [val];
+            } else {
+              cal.Offsets = cal.Offsets.map((n: any) => isNaN(Number(n)) ? 0.0 : Number(n));
+            }
+          });
+        }
+
+        ['Data', 'FFT', 'FRF'].forEach(proc => {
+          if (payload[proc] && payload[proc].Estados) delete payload[proc].Estados;
+        });
+        if (payload.OMA && Array.isArray(payload.OMA.OMAs)) {
+          payload.OMA.OMAs.forEach((oma: any) => {
+            if (oma.Estados) delete oma.Estados;
+          });
+        }
+
         // PURGA: Si la secciÃ³n coincide con el esqueleto (estÃ¡ en blanco)
         // se enviarÃ¡ ausente o vacÃ­a segÃºn llegÃ³ originalmente[cite: 9]
         if (JSON.stringify(payload.FFT) === JSON.stringify(templateFFT)) {
@@ -1009,13 +1044,11 @@ export const useConfigStore = defineStore('config', {
 
         // Endpoint especÃ­fico segÃºn la documentaciÃ³n: POST /remo/Nodos
         await api.post('/remo/Nodos', nodosPayload, { withCredentials: true });
+        
+        // ðŸ‘‡ AÃ‘ADIDO: Recargar la configuraciÃ³n para reflejar los cambios globales en el backend ðŸ‘‡
+        await this.fetchConfig();
+        
         this.successMsg = "Nodos lÃ³gicos actualizados correctamente en el hardware.";
-
-        // Mantenemos la sincronÃ­a del estado local ordenado
-        this.draftConfig.Gestor.Nodos = JSON.parse(JSON.stringify(nodosPayload));
-        if (this.originalConfig) {
-          this.originalConfig.Gestor.Nodos = JSON.parse(JSON.stringify(nodosPayload));
-        }
       } catch (err) {
         console.error("Error al enviar los nodos:", err);
         this.error = "Error al actualizar los nodos en el hardware.";
@@ -1259,6 +1292,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
+import axios from 'axios';
 
 const auth = useAuthStore();
 const configStore = useConfigStore();
@@ -1350,6 +1384,21 @@ const setProcMode = (mode: string, parent: any, key: string) => {
   }
 };
 
+// --- UTILIDADES DE CALIBRACIÃ“N ---
+const updateCalibracionArray = (cal: any, key: 'Gains' | 'Offsets', value: string, defaultVal: number) => {
+  // Si el usuario borra todo, restauramos el valor por defecto
+  if (!value.trim()) {
+    cal[key] = [defaultVal];
+    return;
+  }
+  // Separamos por comas, eliminamos espacios, convertimos a nÃºmero y descartamos letras/sÃ­mbolos raros
+  const arr = value.split(',')
+    .map(item => Number(item.trim()))
+    .filter(n => !isNaN(n));
+    
+  cal[key] = arr.length > 0 ? arr : [defaultVal];
+};
+
 // --- UTILIDADES PARA LISTAS DESPLEGABLES ---
 const addStringToArray = (lista: string[], event: Event) => {
   const target = event.target as HTMLSelectElement | null;
@@ -1358,6 +1407,56 @@ const addStringToArray = (lista: string[], event: Event) => {
       lista.push(target.value);
     }
     target.value = ''; // Resetea el desplegable
+  }
+};
+
+// --- COMPROBAR CONEXIÃ“N INFLUXDB ---
+const testInfluxConnection = async () => {
+  const dbConfig = configStore.draftConfig?.InfluxDB?.DB;
+  
+  if (!dbConfig || !dbConfig.Servidor || !dbConfig.Token || !dbConfig.OrgID || !dbConfig.Bucket) {
+    alert("Por favor, rellena todos los campos (Servidor, Token, OrgID, Bucket) antes de comprobar la conexiÃ³n.");
+    return;
+  }
+
+  // Limpiamos la URL por si el usuario pone una barra al final
+  let serverUrl = dbConfig.Servidor.trim();
+  if (serverUrl.endsWith('/')) serverUrl = serverUrl.slice(0, -1);
+
+  // Formateamos la peticiÃ³n exacta de la documentaciÃ³n
+  const url = `${serverUrl}/api/v2/buckets?name=${encodeURIComponent(dbConfig.Bucket.trim())}&orgID=${encodeURIComponent(dbConfig.OrgID.trim())}`;
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'Authorization': `Bearer ${dbConfig.Token.trim()}`
+      }
+    });
+
+    // Validamos la respuesta exitosa
+    if (response.data && response.data.buckets && response.data.buckets.length > 0) {
+      alert("ConexiÃ³n exitosa. El bucket y la organizaciÃ³n son correctos.");
+    } else if (response.data && response.data.code === 'not found') {
+      // Por si InfluxDB devuelve 200 OK pero con el formato de 'not found'
+      alert(`Error: ${response.data.message}`);
+    } else {
+      alert("Error: Respuesta inesperada del servidor InfluxDB.");
+    }
+  } catch (error: any) {
+    // Si la promesa falla (error 4xx o 5xx)
+    if (error.response) {
+      if (error.response.status === 401) {
+        alert("Error de autenticaciÃ³n: El Token no es vÃ¡lido (401 Unauthorized).");
+      } else if (error.response.status === 404 || (error.response.data && error.response.data.code === 'not found')) {
+        const msg = error.response.data?.message || `No existe el Bucket "${dbConfig.Bucket}" en la OrganizaciÃ³n indicada (404 Not Found).`;
+        alert(`Error: ${msg}`);
+      } else {
+        alert(`Error del servidor InfluxDB: ${error.response.status} - ${error.response.statusText}`);
+      }
+    } else {
+      // Error de CORS o de Red (el servidor no existe)
+      alert("Error de red: No se pudo conectar. Verifica que la URL del Servidor sea correcta y estÃ© accesible.");
+    }
   }
 };
 
@@ -1374,14 +1473,6 @@ const addStringToArray = (lista: string[], event: Event) => {
         <div class="header-titles">
           <h1 class="page-title">ConfiguraciÃ³n del Sistema (ReMo)</h1>
           <p class="page-subtitle">ParÃ¡metros globales, hardware y procesado</p>
-        </div>
-        <div class="header-actions">
-          <button @click="handleCancel" class="btn-secondary" :disabled="configStore.loading">
-            Cancelar Cambios
-          </button>
-          <button @click="handleSaveClick" class="btn-primary" :disabled="configStore.loading">
-            {{ configStore.loading ? 'Enviando...' : 'Guardar ConfiguraciÃ³n' }}
-          </button>
         </div>
       </header>
 
@@ -1413,6 +1504,16 @@ const addStringToArray = (lista: string[], event: Event) => {
           <button :class="['nav-btn', { active: activeMenu === 'influx' }]" @click="activeMenu = 'influx'">
             5. InfluxDB
           </button>
+          <!-- BOTONES DE GUARDAR CANCELAR CAMBIOS EN LA CONFIGURACION -->
+          <div style="margin-top: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--color-border); background-color: var(--color-bg-main);">
+            <button @click="handleSaveClick" class="btn-primary" :disabled="configStore.loading" style="width: 100%;">
+              {{ configStore.loading ? 'Enviando...' : 'Guardar ConfiguraciÃ³n' }}
+            </button>
+            <button @click="handleCancel" class="btn-secondary" :disabled="configStore.loading" style="width: 100%;">
+              Cancelar Cambios
+            </button>
+          </div>
+          
         </aside>
 
         <!-- PANEL DE CONTENIDO DINÃMICO -->
@@ -1498,7 +1599,7 @@ const addStringToArray = (lista: string[], event: Event) => {
               <button @click="addCalibracion" class="btn-text btn-text--edit">+ AÃ±adir CalibraciÃ³n</button>
             </div>
             <table class="data-table">
-              <thead><tr><th>Sensor</th><th>Gains (JSON Array)</th><th>Offsets (JSON Array)</th><th>AcciÃ³n</th></tr></thead>
+              <thead><tr><th>Sensor</th><th>Gains</th><th>Offsets</th><th>AcciÃ³n</th></tr></thead>
               <tbody>
                 <tr v-for="(cal, idx) in configStore.draftConfig.ATHAD.Calibracion" :key="idx">
                   <td class="text-center">
@@ -1506,10 +1607,18 @@ const addStringToArray = (lista: string[], event: Event) => {
                     <div v-if="cal.Sensor === -1" class="badge badge-default" style="display: block; margin-top: 4px;">Por Defecto</div>
                   </td>
                   <td>
-                    <input :value="JSON.stringify(cal.Gains)" @change="e => cal.Gains = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                    <!-- Gains: Separados por comas, quitamos corchetes visuales -->
+                    <input :value="cal.Gains ? cal.Gains.join(', ') : ''" 
+                           @change="e => updateCalibracionArray(cal, 'Gains', (e.target as HTMLInputElement).value, 1.0)" 
+                           type="text" class="form-input-sm" 
+                           title="Valores separados por comas (usa el punto para los decimales)" placeholder="1.0" />
                   </td>
                   <td>
-                    <input :value="JSON.stringify(cal.Offsets)" @change="e => cal.Offsets = JSON.parse((e.target as HTMLInputElement).value)" type="text" class="form-input-sm" />
+                    <!-- Offsets: Separados por comas, quitamos corchetes visuales -->
+                    <input :value="cal.Offsets ? cal.Offsets.join(', ') : ''" 
+                           @change="e => updateCalibracionArray(cal, 'Offsets', (e.target as HTMLInputElement).value, 0.0)" 
+                           type="text" class="form-input-sm" 
+                           title="Valores separados por comas (usa el punto para los decimales)" placeholder="0.0" />
                   </td>
                   <td class="text-center"><button @click="removeCalibracion(idx)" class="btn-icon text-danger">âœ•</button></td>
                 </tr>
@@ -1654,7 +1763,7 @@ const addStringToArray = (lista: string[], event: Event) => {
 
                 <!-- Si eligen Manual -->
                 <div v-else-if="getProcMode((configStore.draftConfig as any)[activeProcTab].Canales) === 'manual'" class="fade-in config-box">
-                  <div class="grid-2-cols">
+                  <div :class="{'grid-2-cols': activeProcTab === 'TA'}">
                     <!-- Columna Canales -->
                     <div>
                       <label class="form-label">Canales FÃ­sicos</label>
@@ -1668,8 +1777,8 @@ const addStringToArray = (lista: string[], event: Event) => {
                         <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
                       </select>
                     </div>
-                    <!-- Columna Estados -->
-                    <div>
+                    <!-- Columna Estados (Solo se muestra para TA) -->
+                    <div v-if="activeProcTab === 'TA'">
                       <label class="form-label">Variables de Estado</label>
                       <div class="tags-container mb-2">
                         <span v-for="(st, i) in (configStore.draftConfig as any)[activeProcTab].Estados" :key="i" class="badge-tag state-tag">
@@ -1737,7 +1846,7 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <option v-for="d in configStore.draftConfig.Gestor.Datas" :key="d.Nombre" :value="d.Nombre">Grupo: {{ d.Nombre }}</option>
                     </select>
                   </div>
-                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="grid-2-cols mt-2">
+                  <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="mt-2">
                     <div>
                       <label class="form-label">Canales FÃ­sicos</label>
                       <div class="tags-container mb-2">
@@ -1746,16 +1855,6 @@ const addStringToArray = (lista: string[], event: Event) => {
                       <select @change="e => { if(!omaGroup.Canales) omaGroup.Canales = []; addStringToArray(omaGroup.Canales, e); }" class="form-select">
                         <option value="">+ AÃ±adir Canal...</option>
                         <option v-for="c in auth.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="form-label">Variables de Estado</label>
-                      <div class="tags-container mb-2">
-                        <span v-for="(st, i) in omaGroup.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="omaGroup.Estados.splice(i,1)" class="tag-close">âœ•</button></span>
-                      </div>
-                      <select @change="e => { if(!omaGroup.Estados) omaGroup.Estados = []; addStringToArray(omaGroup.Estados, e); }" class="form-select">
-                        <option value="">+ AÃ±adir Estado...</option>
-                        <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
                       </select>
                     </div>
                   </div>
@@ -1851,6 +1950,12 @@ const addStringToArray = (lista: string[], event: Event) => {
               <div class="form-group"><label class="form-label">Organization ID</label><input v-model="configStore.draftConfig.InfluxDB.DB.OrgID" type="text" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Bucket</label><input v-model="configStore.draftConfig.InfluxDB.DB.Bucket" type="text" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Reintentos de ConexiÃ³n</label><input v-model.number="configStore.draftConfig.InfluxDB.Reintentos" type="number" class="form-input" /></div>
+              <div class="flex-between mb-4" style="background: var(--color-bg-main); padding: 15px; border-radius: 8px; border: 1px solid var(--color-border);">
+                <p class="text-muted mb-0">Comprueba que las credenciales de InfluxDB sean vÃ¡lidas antes de guardar la configuraciÃ³n.</p>
+                <button @click="testInfluxConnection" class="btn-secondary" type="button">
+                  Comprobar ConexiÃ³n
+                </button>
+              </div>
             </div>
 
             <hr class="divider mt-4 mb-4" />
@@ -2047,53 +2152,18 @@ onMounted(() => {
     
     <h1>{{ auth.isAuthenticated ? `Bienvenido, ${auth.user?.Usuario}` : 'Bienvenido a la pÃ¡gina' }}</h1>
 
-    <div class="links">
-      <router-link v-if="!auth.isAuthenticated" to="/login">Iniciar SesiÃ³n</router-link>
-      <button v-else @click="handleLogout" class="logout-button">Cerrar sesiÃ³n</button>
-      <router-link to="/config">ConfiguraciÃ³n</router-link>
-      <router-link to="/measures">Medidas</router-link>
-      <router-link to="/system">Sistema</router-link>
-    </div>
-
     <DashboardPanel v-if="auth.isAuthenticated" />
 
   </div>
 </template>
 
 <style scoped>
-.links {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  margin-top: 40px;
-}
 
 .home-container {
   display: flex;
   flex-direction: column;
   align-items: center; 
   text-align: center;
-}
-
-/* estilo del boton de logout para cohesiÃ³n con el estilo nativo de Vue */
-.logout-button {
-  background-color: transparent; /* Quitamos el fondo gris del botÃ³n */
-  border: none;                  /* Quitamos el borde */
-  font-family: inherit;          /* Usamos la misma fuente que el resto */
-  font-size: inherit;            /* Usamos el mismo tamaÃ±o de letra */
-  cursor: pointer;
-  
-  /* Propiedades encontradas del main.css de Vue */
-  padding: 3px;
-  transition: 0.4s;
-  
-  /* Color rojo en el mismo formato HSLA que usa Vue */
-  color: hsla(0, 100%, 45%, 1); 
-}
-
-.logout-button:hover {
-  background-color: hsla(0, 100%, 45%, 0.2); 
 }
 
 </style>
@@ -2234,11 +2304,11 @@ const editingProcIndex = ref<number | null>(null);
 const tempProcConfig = ref<any>({}); // AquÃ­ guardaremos el objeto JS temporal
 
 const defaultProcConfigs: Record<string, any> = {
-  'FFT': { "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Rango": { "Min": 0, "Max": -1 }, "dB": false, "Detector": { "Guarda": 0.5, "Promedio": 1.5, "Umbral": 4.0 } },
-  'OMA': { "Frecuencia": { "Maxima": 10, "Tolerancia": 0.05, "Estables": 0 }, "SSI": { "p": 30, "nb": 30, "step": 1, "ordmax": 50, "ordmin": 1 }, "Hard Criteria": { "conj": true, "xi_max": 0.1, "mpc_lim": 0.7, "mpd_lim": 0.3, "cov_max": 0.2 }, "Soft Criteria": { "err_fn": 0.01, "err_xi": 0.05, "err_phi": 0.03 } },
-  'FRF': { "Excitacion": { "Canal": "", "Masa": 1.0 }, "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Promedio": "Lineal", "Frecuencia": { "Minima": 1, "Maxima": 10 }, "EMA": { "Modos": 5, "dr_umbral": 0.1 } },
-  'Data': { "Canales": [] },
-  'TA': { "Canales": [] }
+  'FFT': { Canales: ["*"], Config: { "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Rango": { "Min": 0, "Max": -1 }, "dB": false, "Detector": { "Guarda": 0.5, "Promedio": 1.5, "Umbral": 4.0 } } },
+  'OMA': { OMAs: [{ Nombre: "Grupo 1", Canales: ["*"] }], Config: { "Frecuencia": { "Maxima": 10, "Tolerancia": 0.05, "Estables": 0 }, "SSI": { "p": 30, "nb": 30, "step": 1, "ordmax": 50, "ordmin": 1 }, "Hard Criteria": { "conj": true, "xi_max": 0.1, "mpc_lim": 0.7, "mpd_lim": 0.3, "cov_max": 0.2 }, "Soft Criteria": { "err_fn": 0.01, "err_xi": 0.05, "err_phi": 0.03 } } },
+  'FRF': { Canales: ["*"], Config: { "Excitacion": { "Canal": "", "Masa": 1.0 }, "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Promedio": "Lineal", "Frecuencia": { "Minima": 1, "Maxima": 10 }, "EMA": { "Modos": 5, "dr_umbral": 0.1 } } },
+  'Data': { Canales: ["*"] },
+  'TA': { Canales: ["*"], Estados: ["*"] }
 };
 
 const openProcModal = (idx: number) => {
@@ -2791,87 +2861,164 @@ const handleEliminar = async (medida: MedidaItem) => {
           <button @click="closeProcModal" class="btn-icon text-white">âœ•</button>
         </div>
         
-        <div class="modal-body" style="max-height: 65vh; overflow-y: auto; padding-right: 10px;">
-          
-          <!-- FFT -->
-          <div v-if="procesadosUI[editingProcIndex].Nombre === 'FFT'">
+        <!-- 1. SELECTOR DE CANALES (Para Data, TA, FFT, FRF) -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre !== 'OMA'" class="form-group mb-4 pb-4" style="border-bottom: 1px solid var(--color-border);">
+            <label class="form-label">Canales objetivo para {{ procesadosUI[editingProcIndex].Nombre }}</label>
+            
+            <select :value="getProcMode(tempProcConfig.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, tempProcConfig, 'Canales')" class="form-select mb-2">
+              <option value="todos">Todos los Canales (*)</option>
+              <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
+              <option value="manual">SelecciÃ³n Manual de Canales</option>
+            </select>
+
+            <div v-if="getProcMode(tempProcConfig.Canales) === 'conjunto'" class="fade-in mt-2">
+              <select v-model="tempProcConfig.Canales[0]" class="form-select">
+                <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">Usar grupo: {{ d }}</option>
+              </select>
+            </div>
+
+            <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" class="fade-in config-box mt-2">
+              <div :class="{'grid-2-cols': procesadosUI[editingProcIndex].Nombre === 'TA'}">
+                <div>
+                  <label class="form-label">Canales FÃ­sicos</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">âœ•</button></span>
+                  </div>
+                  <select @change="e => { if(!tempProcConfig.Canales) tempProcConfig.Canales = []; addStringToArray(tempProcConfig.Canales, e); }" class="form-select">
+                    <option value="">+ AÃ±adir Canal...</option>
+                    <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                  </select>
+                </div>
+                <div v-if="procesadosUI[editingProcIndex].Nombre === 'TA'">
+                  <label class="form-label">Variables de Estado</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(st, i) in tempProcConfig.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="tempProcConfig.Estados.splice(i,1)" class="tag-close">âœ•</button></span>
+                  </div>
+                  <select @change="e => { if(!tempProcConfig.Estados) tempProcConfig.Estados = []; addStringToArray(tempProcConfig.Estados, e); }" class="form-select">
+                    <option value="">+ AÃ±adir Estado...</option>
+                    <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. OMA: GRUPOS DE CANALES -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre === 'OMA'" class="form-group mb-4 pb-4" style="border-bottom: 1px solid var(--color-border);">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">Grupos de Canales OMA</h4>
+            <div v-for="(omaGroup, idx) in tempProcConfig.OMAs" :key="idx" class="form-group mt-3 pb-3" style="border-bottom: 1px dashed var(--color-input-border);">
+              <div class="flex-between">
+                <label class="form-label mb-0">Sub-Grupo: <input v-model="omaGroup.Nombre" type="text" class="form-input-sm" style="display:inline-block; width:auto;" /></label>
+                <button @click="tempProcConfig.OMAs.splice(idx, 1)" class="btn-icon text-danger">âœ•</button>
+              </div>
+              
+              <select :value="getProcMode(omaGroup.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, omaGroup, 'Canales')" class="form-select mt-2 mb-2">
+                <option value="todos">Todos los Canales (*)</option>
+                <option value="conjunto">Conjunto de Datos</option>
+                <option value="manual">SelecciÃ³n Manual</option>
+              </select>
+              
+              <div v-if="getProcMode(omaGroup.Canales) === 'conjunto'">
+                <select v-model="omaGroup.Canales[0]" class="form-select">
+                  <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">Grupo: {{ d }}</option>
+                </select>
+              </div>
+              <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="mt-2">
+                <label class="form-label">Canales FÃ­sicos</label>
+                <div class="tags-container mb-2">
+                  <span v-for="(ch, i) in omaGroup.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="omaGroup.Canales.splice(i,1)" class="tag-close">âœ•</button></span>
+                </div>
+                <select @change="e => { if(!omaGroup.Canales) omaGroup.Canales = []; addStringToArray(omaGroup.Canales, e); }" class="form-select">
+                  <option value="">+ AÃ±adir Canal...</option>
+                  <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+            </div>
+            <button @click="if(!tempProcConfig.OMAs) tempProcConfig.OMAs = []; tempProcConfig.OMAs.push({ Nombre: 'Nuevo', Canales: ['*'] })" class="btn-text btn-text--edit mt-2">+ AÃ±adir Grupo OMA</button>
+          </div>
+
+          <!-- 3. CONFIGURACIÃ“N FFT -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre === 'FFT' && tempProcConfig.Config">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">ConfiguraciÃ³n EspecÃ­fica FFT</h4>
             <div class="grid-2-cols mb-2">
-              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig.Config['Inc F']" type="number" step="0.1" class="form-input" /></div>
               <div class="form-group">
                 <label class="form-label">Ventana</label>
-                <select v-model="tempProcConfig.Ventana" class="form-select">
+                <select v-model="tempProcConfig.Config.Ventana" class="form-select">
                   <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                 </select>
               </div>
             </div>
-            <div class="grid-2-cols mb-2" v-if="tempProcConfig.Rango">
-              <div class="form-group"><label class="form-label">Rango Min</label><input v-model.number="tempProcConfig.Rango.Min" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Rango Max</label><input v-model.number="tempProcConfig.Rango.Max" type="number" class="form-input" /></div>
+            <div class="grid-2-cols mb-2" v-if="tempProcConfig.Config.Rango">
+              <div class="form-group"><label class="form-label">Rango Min</label><input v-model.number="tempProcConfig.Config.Rango.Min" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Rango Max</label><input v-model.number="tempProcConfig.Config.Rango.Max" type="number" class="form-input" /></div>
             </div>
             <div class="form-group flex-between mb-4">
               <label class="form-label mb-0">Escala LogarÃ­tmica (dB)</label>
-              <div class="toggle-wrapper"><input type="checkbox" id="mod-fft-db" v-model="tempProcConfig.dB" class="toggle-checkbox" /><label for="mod-fft-db" class="toggle-label"></label></div>
+              <div class="toggle-wrapper"><input type="checkbox" id="mod-fft-db" v-model="tempProcConfig.Config.dB" class="toggle-checkbox" /><label for="mod-fft-db" class="toggle-label"></label></div>
             </div>
             
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">ParÃ¡metros del Detector</h5>
-            <div class="grid-3-cols" v-if="tempProcConfig.Detector">
-              <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="tempProcConfig.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="tempProcConfig.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="tempProcConfig.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
+            <div class="grid-3-cols" v-if="tempProcConfig.Config.Detector">
+              <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="tempProcConfig.Config.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="tempProcConfig.Config.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="tempProcConfig.Config.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
             </div>
           </div>
 
-          <!-- OMA -->
-          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'OMA'">
+          <!-- 4. CONFIGURACIÃ“N OMA -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'OMA' && tempProcConfig.Config">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">ConfiguraciÃ³n EspecÃ­fica OMA</h4>
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Frecuencia</h5>
             <div class="grid-3-cols mb-4">
-              <div class="form-group"><label class="form-label">MÃ¡xima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="tempProcConfig.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Estables</label><input v-model.number="tempProcConfig.Frecuencia.Estables" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">MÃ¡xima</label><input v-model.number="tempProcConfig.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="tempProcConfig.Config.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Estables</label><input v-model.number="tempProcConfig.Config.Frecuencia.Estables" type="number" class="form-input" /></div>
             </div>
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">SSI</h5>
-            <div class="grid-3-cols mb-4" v-if="tempProcConfig.SSI">
-              <div class="form-group"><label class="form-label">p</label><input v-model.number="tempProcConfig.SSI.p" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">nb</label><input v-model.number="tempProcConfig.SSI.nb" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">step</label><input v-model.number="tempProcConfig.SSI.step" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="tempProcConfig.SSI.ordmax" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="tempProcConfig.SSI.ordmin" type="number" class="form-input" /></div>
+            <div class="grid-3-cols mb-4" v-if="tempProcConfig.Config.SSI">
+              <div class="form-group"><label class="form-label">p</label><input v-model.number="tempProcConfig.Config.SSI.p" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">nb</label><input v-model.number="tempProcConfig.Config.SSI.nb" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">step</label><input v-model.number="tempProcConfig.Config.SSI.step" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="tempProcConfig.Config.SSI.ordmax" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="tempProcConfig.Config.SSI.ordmin" type="number" class="form-input" /></div>
             </div>
             <div class="grid-2-cols">
               <div>
                 <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Hard Criteria</h5>
-                <div class="grid-2-cols" v-if="tempProcConfig['Hard Criteria']">
-                  <div class="form-group flex-between"><label class="form-label mb-0">Conj</label><div class="toggle-wrapper"><input type="checkbox" id="mod-oma-conj" v-model="tempProcConfig['Hard Criteria'].conj" class="toggle-checkbox" /><label for="mod-oma-conj" class="toggle-label"></label></div></div>
-                  <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="tempProcConfig['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="tempProcConfig['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
+                <div class="grid-2-cols" v-if="tempProcConfig.Config['Hard Criteria']">
+                  <div class="form-group flex-between"><label class="form-label mb-0">Conj</label><div class="toggle-wrapper"><input type="checkbox" :id="'mod-oma-conj'" v-model="tempProcConfig.Config['Hard Criteria'].conj" class="toggle-checkbox" /><label :for="'mod-oma-conj'" class="toggle-label"></label></div></div>
+                  <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
                 </div>
               </div>
               <div>
                 <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Soft Criteria</h5>
-                <div class="form-group" v-if="tempProcConfig['Soft Criteria']">
-                  <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="tempProcConfig['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
+                <div class="form-group" v-if="tempProcConfig.Config['Soft Criteria']">
+                  <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="tempProcConfig.Config['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="tempProcConfig.Config['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="tempProcConfig.Config['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- FRF -->
-          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'FRF'">
+          <!-- 5. CONFIGURACIÃ“N FRF -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'FRF' && tempProcConfig.Config">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">ConfiguraciÃ³n EspecÃ­fica FRF</h4>
             <div class="grid-2-cols mb-2">
-              <div class="form-group"><label class="form-label">ExcitaciÃ³n (Canal)</label><input v-model="tempProcConfig.Excitacion.Canal" type="text" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">ExcitaciÃ³n (Masa)</label><input v-model.number="tempProcConfig.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ExcitaciÃ³n (Canal)</label><input v-model="tempProcConfig.Config.Excitacion.Canal" type="text" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ExcitaciÃ³n (Masa)</label><input v-model.number="tempProcConfig.Config.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
             </div>
             <div class="grid-3-cols mb-2">
-              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig.Config['Inc F']" type="number" step="0.1" class="form-input" /></div>
               <div class="form-group">
                 <label class="form-label">Ventana</label>
-                <select v-model="tempProcConfig.Ventana" class="form-select">
+                <select v-model="tempProcConfig.Config.Ventana" class="form-select">
                   <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                 </select>
               </div>
@@ -2879,68 +3026,17 @@ const handleEliminar = async (medida: MedidaItem) => {
             <div class="grid-3-cols mb-4">
               <div class="form-group">
                 <label class="form-label">Promedio</label>
-                <select v-model="tempProcConfig.Promedio" class="form-select"><option>Lineal</option><option>Exponencial</option></select>
+                <select v-model="tempProcConfig.Config.Promedio" class="form-select"><option>Lineal</option><option>Exponencial</option></select>
               </div>
-              <div class="form-group"><label class="form-label">Frec. MÃ­nima</label><input v-model.number="tempProcConfig.Frecuencia.Minima" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Frec. MÃ¡xima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Frec. MÃ­nima</label><input v-model.number="tempProcConfig.Config.Frecuencia.Minima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Frec. MÃ¡xima</label><input v-model.number="tempProcConfig.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
             </div>
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">AnÃ¡lisis Modal Experimental (EMA)</h5>
             <div class="grid-2-cols">
-              <div class="form-group"><label class="form-label">Modos</label><input v-model.number="tempProcConfig.EMA.Modos" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="tempProcConfig.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Modos</label><input v-model.number="tempProcConfig.Config.EMA.Modos" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="tempProcConfig.Config.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
             </div>
           </div>
-
-          <!-- DATA / TA -->
-          <div v-else>
-            <div class="form-group mb-4">
-              <label class="form-label">Canales objetivo para {{ procesadosUI[editingProcIndex].Nombre }}</label>
-              
-              <!-- Selector Inteligente de Modo -->
-              <select :value="getProcMode(tempProcConfig.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, tempProcConfig, 'Canales')" class="form-select mb-2">
-                <option value="todos">Todos los Canales (*)</option>
-                <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
-                <option value="manual">SelecciÃ³n Manual de Canales</option>
-              </select>
-
-              <!-- Si eligen Conjunto -->
-              <div v-if="getProcMode(tempProcConfig.Canales) === 'conjunto'">
-                <select v-model="tempProcConfig.Canales[0]" class="form-select">
-                  <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">
-                    Usar grupo: {{ d }}
-                  </option>
-                </select>
-              </div>
-
-              <!-- Si eligen Manual -->
-              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" class="fade-in config-box mt-2">
-                <div class="grid-2-cols">
-                  <div>
-                    <label class="form-label">Canales FÃ­sicos</label>
-                    <div class="tags-container mb-2">
-                      <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">âœ•</button></span>
-                    </div>
-                    <select @change="e => { if(!tempProcConfig.Canales) tempProcConfig.Canales = []; addStringToArray(tempProcConfig.Canales, e); }" class="form-select">
-                      <option value="">+ AÃ±adir Canal...</option>
-                      <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="form-label">Variables de Estado</label>
-                    <div class="tags-container mb-2">
-                      <span v-for="(st, i) in tempProcConfig.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="tempProcConfig.Estados.splice(i,1)" class="tag-close">âœ•</button></span>
-                    </div>
-                    <select @change="e => { if(!tempProcConfig.Estados) tempProcConfig.Estados = []; addStringToArray(tempProcConfig.Estados, e); }" class="form-select">
-                      <option value="">+ AÃ±adir Estado...</option>
-                      <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
 
         <div class="modal-actions" style="margin-top: 20px; border-top: 1px solid var(--color-border); padding-top: 20px;">
           <button @click="closeProcModal" class="btn-secondary">Cancelar</button>
@@ -3647,37 +3743,137 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 App.vue:
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 import Logo from '@/components/Logo.vue'
+
+const auth = useAuthStore()
+const router = useRouter()
+
+const handleLogout = async () => {
+  try {
+    await auth.logout()
+    router.push('/login') // Forzamos la vuelta al login tras cerrar sesiÃ³n
+  } catch (error) {
+    console.error("Error al cerrar sesiÃ³n", error)
+  }
+}
 </script>
 
-
-
 <template>
-  <header class="logo-container">
-    <Logo />
-  </header>
+  <div class="app-layout">
+    
+    <!-- BARRA DE NAVEGACIÃ“N SUPERIOR FIJA -->
+    <header class="topbar">
+      <div class="logo-wrapper">
+        <Logo />
+      </div>
+      
+      <!-- SÃ³lo mostramos los botones si el usuario estÃ¡ logueado -->
+      <nav v-if="auth.isAuthenticated" class="main-nav">
+        <router-link :to="{ name: 'home' }" class="nav-btn">Dashboard</router-link>
+        <router-link :to="{ name: 'measures' }" class="nav-btn">Medidas</router-link>
+        <router-link :to="{ name: 'config' }" class="nav-btn">ConfiguraciÃ³n</router-link>
+        <router-link :to="{ name: 'system' }" class="nav-btn">Mantenimiento</router-link>
+        
+        <div class="divider-vertical"></div>
+        
+        <button @click="handleLogout" class="nav-btn logout-btn">Cerrar sesiÃ³n</button>
+      </nav>
+    </header>
 
-  <main class="main-content">
-    <router-view />
-  </main>
+    <!-- CONTENIDO DINÃMICO DE LAS VISTAS -->
+    <main class="main-content">
+      <router-view />
+    </main>
+
+  </div>
 </template>
 
 <style scoped>
-.logo-container {
-  position: absolute; /* TambiÃ©n puedes usar 'fixed' si quieres que no se mueva al hacer scroll */
-  top: 20px;
-  left: 20px;
-  z-index: 1000; /* Asegura que el logo siempre quede por encima del contenido */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-bg-main); /* Fondo de la aplicaciÃ³n global */
+}
+
+/* LA BARRA SUPERIOR */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--color-bg-white);
+  padding: 0 2rem;
+  height: 70px; /* Altura fija para que no salte */
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); /* Sombra elegante */
+  position: sticky;
+  top: 0;
+  z-index: 1000; /* Siempre por encima del resto */
+}
+
+.logo-wrapper {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.main-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ESTÃ‰TICA DE LOS BOTONES */
+.nav-btn {
+  text-decoration: none;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  border-radius: 6px;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.nav-btn:hover {
+  background-color: #f3f4f6; /* Gris suave al pasar el ratÃ³n */
+  color: var(--color-text-primary);
+}
+
+/* LA MAGIA DE VUE: Clase automÃ¡tica cuando la ruta coincide con el botÃ³n */
+.nav-btn.router-link-active {
+  background-color: var(--color-primary);
+  color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+}
+
+.divider-vertical {
+  width: 1px;
+  height: 24px;
+  background-color: var(--color-input-border);
+  margin: 0 4px;
+}
+
+/* BOTÃ“N DE LOGOUT ESPECIAL */
+.logout-btn {
+  background-color: transparent;
+  border: 1px solid #fca5a5;
+  color: var(--color-danger);
+}
+
+.logout-btn:hover {
+  background-color: #fef2f2;
+  color: var(--color-danger-hover);
+  border-color: var(--color-danger-hover);
 }
 
 .main-content {
+  flex: 1;
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  width: 100%;
-  padding: 20px; /* Margen de seguridad interno para pantallas pequeÃ±as */
-  box-sizing: border-box;
+  /* Las vistas ya gestionan su propio padding, asÃ­ que aquÃ­ no forzamos nada */
 }
 </style>
 main.ts:

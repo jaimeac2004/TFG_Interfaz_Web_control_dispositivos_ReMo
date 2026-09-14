@@ -78,6 +78,34 @@ export const useConfigStore = defineStore('config', {
           delete payload.Gestor.Medidas;
         }
 
+        if (payload.ATHAD && Array.isArray(payload.ATHAD.Calibracion)) {
+          payload.ATHAD.Calibracion.forEach((cal: any) => {
+            // Asegurar Gains
+            if (!Array.isArray(cal.Gains)) {
+              const val = Number(cal.Gains);
+              cal.Gains = isNaN(val) ? [1.0] : [val];
+            } else {
+              cal.Gains = cal.Gains.map((n: any) => isNaN(Number(n)) ? 1.0 : Number(n));
+            }
+            // Asegurar Offsets
+            if (!Array.isArray(cal.Offsets)) {
+              const val = Number(cal.Offsets);
+              cal.Offsets = isNaN(val) ? [0.0] : [val];
+            } else {
+              cal.Offsets = cal.Offsets.map((n: any) => isNaN(Number(n)) ? 0.0 : Number(n));
+            }
+          });
+        }
+
+        ['Data', 'FFT', 'FRF'].forEach(proc => {
+          if (payload[proc] && payload[proc].Estados) delete payload[proc].Estados;
+        });
+        if (payload.OMA && Array.isArray(payload.OMA.OMAs)) {
+          payload.OMA.OMAs.forEach((oma: any) => {
+            if (oma.Estados) delete oma.Estados;
+          });
+        }
+
         // PURGA: Si la sección coincide con el esqueleto (está en blanco)
         // se enviará ausente o vacía según llegó originalmente[cite: 9]
         if (JSON.stringify(payload.FFT) === JSON.stringify(templateFFT)) {

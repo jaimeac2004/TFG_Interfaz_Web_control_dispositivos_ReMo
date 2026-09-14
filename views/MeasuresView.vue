@@ -55,11 +55,11 @@ const editingProcIndex = ref<number | null>(null);
 const tempProcConfig = ref<any>({}); // Aquí guardaremos el objeto JS temporal
 
 const defaultProcConfigs: Record<string, any> = {
-  'FFT': { "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Rango": { "Min": 0, "Max": -1 }, "dB": false, "Detector": { "Guarda": 0.5, "Promedio": 1.5, "Umbral": 4.0 } },
-  'OMA': { "Frecuencia": { "Maxima": 10, "Tolerancia": 0.05, "Estables": 0 }, "SSI": { "p": 30, "nb": 30, "step": 1, "ordmax": 50, "ordmin": 1 }, "Hard Criteria": { "conj": true, "xi_max": 0.1, "mpc_lim": 0.7, "mpd_lim": 0.3, "cov_max": 0.2 }, "Soft Criteria": { "err_fn": 0.01, "err_xi": 0.05, "err_phi": 0.03 } },
-  'FRF': { "Excitacion": { "Canal": "", "Masa": 1.0 }, "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Promedio": "Lineal", "Frecuencia": { "Minima": 1, "Maxima": 10 }, "EMA": { "Modos": 5, "dr_umbral": 0.1 } },
-  'Data': { "Canales": [] },
-  'TA': { "Canales": [] }
+  'FFT': { Canales: ["*"], Config: { "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Rango": { "Min": 0, "Max": -1 }, "dB": false, "Detector": { "Guarda": 0.5, "Promedio": 1.5, "Umbral": 4.0 } } },
+  'OMA': { OMAs: [{ Nombre: "Grupo 1", Canales: ["*"] }], Config: { "Frecuencia": { "Maxima": 10, "Tolerancia": 0.05, "Estables": 0 }, "SSI": { "p": 30, "nb": 30, "step": 1, "ordmax": 50, "ordmin": 1 }, "Hard Criteria": { "conj": true, "xi_max": 0.1, "mpc_lim": 0.7, "mpd_lim": 0.3, "cov_max": 0.2 }, "Soft Criteria": { "err_fn": 0.01, "err_xi": 0.05, "err_phi": 0.03 } } },
+  'FRF': { Canales: ["*"], Config: { "Excitacion": { "Canal": "", "Masa": 1.0 }, "Res F": 0.1, "Inc F": 0, "Ventana": "Hanning", "Promedio": "Lineal", "Frecuencia": { "Minima": 1, "Maxima": 10 }, "EMA": { "Modos": 5, "dr_umbral": 0.1 } } },
+  'Data': { Canales: ["*"] },
+  'TA': { Canales: ["*"], Estados: ["*"] }
 };
 
 const openProcModal = (idx: number) => {
@@ -612,87 +612,164 @@ const handleEliminar = async (medida: MedidaItem) => {
           <button @click="closeProcModal" class="btn-icon text-white">✕</button>
         </div>
         
-        <div class="modal-body" style="max-height: 65vh; overflow-y: auto; padding-right: 10px;">
-          
-          <!-- FFT -->
-          <div v-if="procesadosUI[editingProcIndex].Nombre === 'FFT'">
+        <!-- 1. SELECTOR DE CANALES (Para Data, TA, FFT, FRF) -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre !== 'OMA'" class="form-group mb-4 pb-4" style="border-bottom: 1px solid var(--color-border);">
+            <label class="form-label">Canales objetivo para {{ procesadosUI[editingProcIndex].Nombre }}</label>
+            
+            <select :value="getProcMode(tempProcConfig.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, tempProcConfig, 'Canales')" class="form-select mb-2">
+              <option value="todos">Todos los Canales (*)</option>
+              <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
+              <option value="manual">Selección Manual de Canales</option>
+            </select>
+
+            <div v-if="getProcMode(tempProcConfig.Canales) === 'conjunto'" class="fade-in mt-2">
+              <select v-model="tempProcConfig.Canales[0]" class="form-select">
+                <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">Usar grupo: {{ d }}</option>
+              </select>
+            </div>
+
+            <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" class="fade-in config-box mt-2">
+              <div :class="{'grid-2-cols': procesadosUI[editingProcIndex].Nombre === 'TA'}">
+                <div>
+                  <label class="form-label">Canales Físicos</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">✕</button></span>
+                  </div>
+                  <select @change="e => { if(!tempProcConfig.Canales) tempProcConfig.Canales = []; addStringToArray(tempProcConfig.Canales, e); }" class="form-select">
+                    <option value="">+ Añadir Canal...</option>
+                    <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                  </select>
+                </div>
+                <div v-if="procesadosUI[editingProcIndex].Nombre === 'TA'">
+                  <label class="form-label">Variables de Estado</label>
+                  <div class="tags-container mb-2">
+                    <span v-for="(st, i) in tempProcConfig.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="tempProcConfig.Estados.splice(i,1)" class="tag-close">✕</button></span>
+                  </div>
+                  <select @change="e => { if(!tempProcConfig.Estados) tempProcConfig.Estados = []; addStringToArray(tempProcConfig.Estados, e); }" class="form-select">
+                    <option value="">+ Añadir Estado...</option>
+                    <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. OMA: GRUPOS DE CANALES -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre === 'OMA'" class="form-group mb-4 pb-4" style="border-bottom: 1px solid var(--color-border);">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">Grupos de Canales OMA</h4>
+            <div v-for="(omaGroup, idx) in tempProcConfig.OMAs" :key="idx" class="form-group mt-3 pb-3" style="border-bottom: 1px dashed var(--color-input-border);">
+              <div class="flex-between">
+                <label class="form-label mb-0">Sub-Grupo: <input v-model="omaGroup.Nombre" type="text" class="form-input-sm" style="display:inline-block; width:auto;" /></label>
+                <button @click="tempProcConfig.OMAs.splice(idx, 1)" class="btn-icon text-danger">✕</button>
+              </div>
+              
+              <select :value="getProcMode(omaGroup.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, omaGroup, 'Canales')" class="form-select mt-2 mb-2">
+                <option value="todos">Todos los Canales (*)</option>
+                <option value="conjunto">Conjunto de Datos</option>
+                <option value="manual">Selección Manual</option>
+              </select>
+              
+              <div v-if="getProcMode(omaGroup.Canales) === 'conjunto'">
+                <select v-model="omaGroup.Canales[0]" class="form-select">
+                  <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">Grupo: {{ d }}</option>
+                </select>
+              </div>
+              <div v-else-if="getProcMode(omaGroup.Canales) === 'manual'" class="mt-2">
+                <label class="form-label">Canales Físicos</label>
+                <div class="tags-container mb-2">
+                  <span v-for="(ch, i) in omaGroup.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="omaGroup.Canales.splice(i,1)" class="tag-close">✕</button></span>
+                </div>
+                <select @change="e => { if(!omaGroup.Canales) omaGroup.Canales = []; addStringToArray(omaGroup.Canales, e); }" class="form-select">
+                  <option value="">+ Añadir Canal...</option>
+                  <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+            </div>
+            <button @click="if(!tempProcConfig.OMAs) tempProcConfig.OMAs = []; tempProcConfig.OMAs.push({ Nombre: 'Nuevo', Canales: ['*'] })" class="btn-text btn-text--edit mt-2">+ Añadir Grupo OMA</button>
+          </div>
+
+          <!-- 3. CONFIGURACIÓN FFT -->
+          <div v-if="procesadosUI[editingProcIndex].Nombre === 'FFT' && tempProcConfig.Config">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">Configuración Específica FFT</h4>
             <div class="grid-2-cols mb-2">
-              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig.Config['Inc F']" type="number" step="0.1" class="form-input" /></div>
               <div class="form-group">
                 <label class="form-label">Ventana</label>
-                <select v-model="tempProcConfig.Ventana" class="form-select">
+                <select v-model="tempProcConfig.Config.Ventana" class="form-select">
                   <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                 </select>
               </div>
             </div>
-            <div class="grid-2-cols mb-2" v-if="tempProcConfig.Rango">
-              <div class="form-group"><label class="form-label">Rango Min</label><input v-model.number="tempProcConfig.Rango.Min" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Rango Max</label><input v-model.number="tempProcConfig.Rango.Max" type="number" class="form-input" /></div>
+            <div class="grid-2-cols mb-2" v-if="tempProcConfig.Config.Rango">
+              <div class="form-group"><label class="form-label">Rango Min</label><input v-model.number="tempProcConfig.Config.Rango.Min" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Rango Max</label><input v-model.number="tempProcConfig.Config.Rango.Max" type="number" class="form-input" /></div>
             </div>
             <div class="form-group flex-between mb-4">
               <label class="form-label mb-0">Escala Logarítmica (dB)</label>
-              <div class="toggle-wrapper"><input type="checkbox" id="mod-fft-db" v-model="tempProcConfig.dB" class="toggle-checkbox" /><label for="mod-fft-db" class="toggle-label"></label></div>
+              <div class="toggle-wrapper"><input type="checkbox" id="mod-fft-db" v-model="tempProcConfig.Config.dB" class="toggle-checkbox" /><label for="mod-fft-db" class="toggle-label"></label></div>
             </div>
             
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Parámetros del Detector</h5>
-            <div class="grid-3-cols" v-if="tempProcConfig.Detector">
-              <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="tempProcConfig.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="tempProcConfig.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="tempProcConfig.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
+            <div class="grid-3-cols" v-if="tempProcConfig.Config.Detector">
+              <div class="form-group"><label class="form-label">Guarda</label><input v-model.number="tempProcConfig.Config.Detector.Guarda" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Promedio</label><input v-model.number="tempProcConfig.Config.Detector.Promedio" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Umbral</label><input v-model.number="tempProcConfig.Config.Detector.Umbral" type="number" step="0.1" class="form-input" /></div>
             </div>
           </div>
 
-          <!-- OMA -->
-          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'OMA'">
+          <!-- 4. CONFIGURACIÓN OMA -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'OMA' && tempProcConfig.Config">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">Configuración Específica OMA</h4>
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Frecuencia</h5>
             <div class="grid-3-cols mb-4">
-              <div class="form-group"><label class="form-label">Máxima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="tempProcConfig.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Estables</label><input v-model.number="tempProcConfig.Frecuencia.Estables" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Máxima</label><input v-model.number="tempProcConfig.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Tolerancia</label><input v-model.number="tempProcConfig.Config.Frecuencia.Tolerancia" type="number" step="0.01" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Estables</label><input v-model.number="tempProcConfig.Config.Frecuencia.Estables" type="number" class="form-input" /></div>
             </div>
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">SSI</h5>
-            <div class="grid-3-cols mb-4" v-if="tempProcConfig.SSI">
-              <div class="form-group"><label class="form-label">p</label><input v-model.number="tempProcConfig.SSI.p" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">nb</label><input v-model.number="tempProcConfig.SSI.nb" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">step</label><input v-model.number="tempProcConfig.SSI.step" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="tempProcConfig.SSI.ordmax" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="tempProcConfig.SSI.ordmin" type="number" class="form-input" /></div>
+            <div class="grid-3-cols mb-4" v-if="tempProcConfig.Config.SSI">
+              <div class="form-group"><label class="form-label">p</label><input v-model.number="tempProcConfig.Config.SSI.p" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">nb</label><input v-model.number="tempProcConfig.Config.SSI.nb" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">step</label><input v-model.number="tempProcConfig.Config.SSI.step" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmax</label><input v-model.number="tempProcConfig.Config.SSI.ordmax" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">ordmin</label><input v-model.number="tempProcConfig.Config.SSI.ordmin" type="number" class="form-input" /></div>
             </div>
             <div class="grid-2-cols">
               <div>
                 <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Hard Criteria</h5>
-                <div class="grid-2-cols" v-if="tempProcConfig['Hard Criteria']">
-                  <div class="form-group flex-between"><label class="form-label mb-0">Conj</label><div class="toggle-wrapper"><input type="checkbox" id="mod-oma-conj" v-model="tempProcConfig['Hard Criteria'].conj" class="toggle-checkbox" /><label for="mod-oma-conj" class="toggle-label"></label></div></div>
-                  <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="tempProcConfig['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="tempProcConfig['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="tempProcConfig['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
+                <div class="grid-2-cols" v-if="tempProcConfig.Config['Hard Criteria']">
+                  <div class="form-group flex-between"><label class="form-label mb-0">Conj</label><div class="toggle-wrapper"><input type="checkbox" :id="'mod-oma-conj'" v-model="tempProcConfig.Config['Hard Criteria'].conj" class="toggle-checkbox" /><label :for="'mod-oma-conj'" class="toggle-label"></label></div></div>
+                  <div class="form-group"><label class="form-label">xi_max</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].xi_max" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpc_lim</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].mpc_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">mpd_lim</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].mpd_lim" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">cov_max</label><input v-model.number="tempProcConfig.Config['Hard Criteria'].cov_max" type="number" step="0.01" class="form-input" /></div>
                 </div>
               </div>
               <div>
                 <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Soft Criteria</h5>
-                <div class="form-group" v-if="tempProcConfig['Soft Criteria']">
-                  <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="tempProcConfig['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="tempProcConfig['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
+                <div class="form-group" v-if="tempProcConfig.Config['Soft Criteria']">
+                  <div class="form-group mb-2"><label class="form-label">err_fn</label><input v-model.number="tempProcConfig.Config['Soft Criteria'].err_fn" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group mb-2"><label class="form-label">err_xi</label><input v-model.number="tempProcConfig.Config['Soft Criteria'].err_xi" type="number" step="0.01" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">err_phi</label><input v-model.number="tempProcConfig.Config['Soft Criteria'].err_phi" type="number" step="0.01" class="form-input" /></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- FRF -->
-          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'FRF'">
+          <!-- 5. CONFIGURACIÓN FRF -->
+          <div v-else-if="procesadosUI[editingProcIndex].Nombre === 'FRF' && tempProcConfig.Config">
+            <h4 class="section-title" style="border: none; margin-bottom: 10px;">Configuración Específica FRF</h4>
             <div class="grid-2-cols mb-2">
-              <div class="form-group"><label class="form-label">Excitación (Canal)</label><input v-model="tempProcConfig.Excitacion.Canal" type="text" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Excitación (Masa)</label><input v-model.number="tempProcConfig.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Excitación (Canal)</label><input v-model="tempProcConfig.Config.Excitacion.Canal" type="text" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Excitación (Masa)</label><input v-model.number="tempProcConfig.Config.Excitacion.Masa" type="number" step="0.1" class="form-input" /></div>
             </div>
             <div class="grid-3-cols mb-2">
-              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig['Res F']" type="number" step="0.1" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig['Inc F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Res F</label><input v-model.number="tempProcConfig.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="tempProcConfig.Config['Inc F']" type="number" step="0.1" class="form-input" /></div>
               <div class="form-group">
                 <label class="form-label">Ventana</label>
-                <select v-model="tempProcConfig.Ventana" class="form-select">
+                <select v-model="tempProcConfig.Config.Ventana" class="form-select">
                   <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                 </select>
               </div>
@@ -700,68 +777,17 @@ const handleEliminar = async (medida: MedidaItem) => {
             <div class="grid-3-cols mb-4">
               <div class="form-group">
                 <label class="form-label">Promedio</label>
-                <select v-model="tempProcConfig.Promedio" class="form-select"><option>Lineal</option><option>Exponencial</option></select>
+                <select v-model="tempProcConfig.Config.Promedio" class="form-select"><option>Lineal</option><option>Exponencial</option></select>
               </div>
-              <div class="form-group"><label class="form-label">Frec. Mínima</label><input v-model.number="tempProcConfig.Frecuencia.Minima" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">Frec. Máxima</label><input v-model.number="tempProcConfig.Frecuencia.Maxima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Frec. Mínima</label><input v-model.number="tempProcConfig.Config.Frecuencia.Minima" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Frec. Máxima</label><input v-model.number="tempProcConfig.Config.Frecuencia.Maxima" type="number" class="form-input" /></div>
             </div>
             <h5 class="section-title" style="font-size: 1rem; margin-bottom: 10px;">Análisis Modal Experimental (EMA)</h5>
             <div class="grid-2-cols">
-              <div class="form-group"><label class="form-label">Modos</label><input v-model.number="tempProcConfig.EMA.Modos" type="number" class="form-input" /></div>
-              <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="tempProcConfig.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Modos</label><input v-model.number="tempProcConfig.Config.EMA.Modos" type="number" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">dr_umbral</label><input v-model.number="tempProcConfig.Config.EMA.dr_umbral" type="number" step="0.01" class="form-input" /></div>
             </div>
           </div>
-
-          <!-- DATA / TA -->
-          <div v-else>
-            <div class="form-group mb-4">
-              <label class="form-label">Canales objetivo para {{ procesadosUI[editingProcIndex].Nombre }}</label>
-              
-              <!-- Selector Inteligente de Modo -->
-              <select :value="getProcMode(tempProcConfig.Canales)" @change="e => setProcMode((e.target as HTMLSelectElement).value, tempProcConfig, 'Canales')" class="form-select mb-2">
-                <option value="todos">Todos los Canales (*)</option>
-                <option value="conjunto">Un Conjunto de Datos (Gestor.Datas)</option>
-                <option value="manual">Selección Manual de Canales</option>
-              </select>
-
-              <!-- Si eligen Conjunto -->
-              <div v-if="getProcMode(tempProcConfig.Canales) === 'conjunto'">
-                <select v-model="tempProcConfig.Canales[0]" class="form-select">
-                  <option v-for="d in measuresStore.listaDatas" :key="d" :value="d">
-                    Usar grupo: {{ d }}
-                  </option>
-                </select>
-              </div>
-
-              <!-- Si eligen Manual -->
-              <div v-else-if="getProcMode(tempProcConfig.Canales) === 'manual'" class="fade-in config-box mt-2">
-                <div class="grid-2-cols">
-                  <div>
-                    <label class="form-label">Canales Físicos</label>
-                    <div class="tags-container mb-2">
-                      <span v-for="(ch, i) in tempProcConfig.Canales" :key="i" class="badge-tag">{{ ch }} <button @click="tempProcConfig.Canales.splice(i,1)" class="tag-close">✕</button></span>
-                    </div>
-                    <select @change="e => { if(!tempProcConfig.Canales) tempProcConfig.Canales = []; addStringToArray(tempProcConfig.Canales, e); }" class="form-select">
-                      <option value="">+ Añadir Canal...</option>
-                      <option v-for="c in authStore.canalesDisponibles" :key="c" :value="c">{{ c }}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="form-label">Variables de Estado</label>
-                    <div class="tags-container mb-2">
-                      <span v-for="(st, i) in tempProcConfig.Estados" :key="i" class="badge-tag state-tag">{{ st }} <button @click="tempProcConfig.Estados.splice(i,1)" class="tag-close">✕</button></span>
-                    </div>
-                    <select @change="e => { if(!tempProcConfig.Estados) tempProcConfig.Estados = []; addStringToArray(tempProcConfig.Estados, e); }" class="form-select">
-                      <option value="">+ Añadir Estado...</option>
-                      <option v-for="s in estadosDisponibles" :key="s" :value="s">{{ s }}</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
 
         <div class="modal-actions" style="margin-top: 20px; border-top: 1px solid var(--color-border); padding-top: 20px;">
           <button @click="closeProcModal" class="btn-secondary">Cancelar</button>

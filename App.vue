@@ -28,8 +28,8 @@ const handleLogout = async () => {
       <!-- Sólo mostramos los botones si el usuario está logueado -->
       <nav v-if="auth.isAuthenticated" class="main-nav">
         <router-link :to="{ name: 'home' }" class="nav-btn">Dashboard</router-link>
-        <router-link :to="{ name: 'config' }" class="nav-btn">Configuración</router-link>
         <router-link :to="{ name: 'measures' }" class="nav-btn">Medidas</router-link>
+        <router-link :to="{ name: 'config' }" class="nav-btn">Configuración</router-link>
         <router-link :to="{ name: 'system' }" class="nav-btn">Mantenimiento</router-link>
         
         <div class="divider-vertical"></div>
