@@ -42,4 +42,20 @@ El proyecto sigue una arquitectura fuertemente desacoplada:
 1. Clonar el repositorio:
    ```bash
    git clone [https://github.com/jaimeac2004/TFG_Interfaz_Web_control_dispositivos_ReMo.git](https://github.com/jaimeac2004/TFG_Interfaz_Web_control_dispositivos_ReMo.git)
-   cd TFG_Interfaz_Web_control_dispositivos_ReMo
+   cd TFG_Interfaz_Web_control_dispositivos_ReMo     
+     
+2. Instalar dependencias:
+   ```bash
+   npm install
+
+3. Compilar proyecto(cuando se quieran implementar y/o probar cambios):
+   ```bash
+   npm run build
+
+4. Enviar código compilado al dispositivo y desplegar la página:
+    ```bash
+    zip Web.zip ./dist/*
+    scp -P <puerto> <ruta_a_archivo_local> <usuario>@<IP_o_identificador_de_la_maquina>:<ruta>
+	ssh -p <puerto> <usuario>@<IP_o_identificador_de_la_maquina> #entramos en el dispositivo ReMo
+    cd <ruta>
+    unzip Web.zip
