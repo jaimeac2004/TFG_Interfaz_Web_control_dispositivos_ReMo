@@ -31,6 +31,23 @@ export const useConfigStore = defineStore('config', {
       try {
         const res = await api.get<FullConfig>('/remo/Config', { withCredentials: true })
         const data = res.data;
+
+        if (data.ATHAD && Array.isArray(data.ATHAD.Calibracion)) {
+          data.ATHAD.Calibracion.forEach((cal: any) => {
+            if (!Array.isArray(cal.Gains)) {
+              const val = Number(cal.Gains);
+              cal.Gains = isNaN(val) ? [1.0] : [val];
+            }
+            if (!Array.isArray(cal.Offsets)) {
+              const val = Number(cal.Offsets);
+              cal.Offsets = isNaN(val) ? [0.0] : [val];
+            }
+          });
+        }
+        
+        // Prevención extra: Hidratar Data y TA si llegaran a faltar por completo en el JSON
+        if (!data.Data) data.Data = { Canales: [] };
+        if (!data.TA) data.TA = { Canales: [], Estados: [] };
         
         // Guardamos cómo llegó exactamente para futuras comparaciones
         this.originalConfig = JSON.parse(JSON.stringify(data));

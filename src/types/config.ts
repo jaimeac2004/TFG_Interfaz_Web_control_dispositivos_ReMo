@@ -28,7 +28,7 @@ export interface FullConfig {
   };
   ATHAD: ATHADConfig;
   Data: { Canales: string[] };
-  TA: { Canales: string[] };
+  TA: { Canales: string[], Estados: string[] };
   FFT: { Canales: string[]; Config: any };
   OMA: { OMAs: any[]; Config: any };
   FRF: { Canales: string[]; Config: any };
