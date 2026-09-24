@@ -389,7 +389,7 @@ const handleEliminar = async (medida: MedidaItem) => {
           <h1 class="page-title">Programador de Medidas</h1>
           <p class="page-subtitle">Gestión de adquisiciones autónomas (Gestor.Medidas)</p>
         </div>
-        <button @click="openLanzarPanel" class="btn-secondary" :disabled="measuresStore.loading">
+        <button @click="openLanzarPanel" class="btn-secondary" style="flex: none; padding: 0.625rem 1.25rem;" :disabled="measuresStore.loading">
           Lanzar Medida
         </button>
         <button @click="openCreatePanel" class="btn-primary" :disabled="measuresStore.loading">

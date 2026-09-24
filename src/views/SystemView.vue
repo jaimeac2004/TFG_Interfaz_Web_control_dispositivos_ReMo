@@ -19,7 +19,7 @@ const fetchVersion = async () => {
   try {
     const res = await api.get('/remo/Version', { withCredentials: true });
     // Soporta tanto que el JSON devuelva { "Version": "1.0" } como que devuelva el string/número directo
-    currentVersion.value = res.data?.Version || res.data?.version || res.data || 'Desconocida';
+    currentVersion.value = res.data?.['Version string'] || res.data?.Version || (typeof res.data === 'string' ? res.data : 'Desconocida');
   } catch (error) {
     console.error("Error obteniendo la versión del firmware:", error);
     currentVersion.value = 'Desconocida';
