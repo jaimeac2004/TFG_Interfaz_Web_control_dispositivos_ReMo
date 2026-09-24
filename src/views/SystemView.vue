@@ -13,8 +13,21 @@ const configFile = ref<File | null>(null);
 const firmwareFile = ref<File | null>(null);
 
 const loadingMsg = ref('');
+const currentVersion = ref('Cargando...');
+
+const fetchVersion = async () => {
+  try {
+    const res = await api.get('/remo/Version', { withCredentials: true });
+    // Soporta tanto que el JSON devuelva { "Version": "1.0" } como que devuelva el string/número directo
+    currentVersion.value = res.data?.Version || res.data?.version || res.data || 'Desconocida';
+  } catch (error) {
+    console.error("Error obteniendo la versión del firmware:", error);
+    currentVersion.value = 'Desconocida';
+  }
+};
 
 onMounted(() => {
+  fetchVersion();
   // Comprobación pasiva de sesión
   pollInterval = setInterval(async () => {
     await auth.checkSession();
@@ -176,6 +189,10 @@ const updateFirmware = async () => {
           <!-- ACTUALIZAR FIRMWARE -->
           <div class="config-box action-card warning-card">
             <h3>⚙️ Actualizar Firmware</h3>
+            <div class="version-display">
+              <span>Versión instalada:</span>
+              <span class="version-tag">{{ currentVersion }}</span>
+            </div>
             <p class="text-muted">Sube un nuevo archivo de firmware al sistema. <strong>Atención:</strong> Un corte de energía durante este proceso puede dañar el equipo.</p>
             <input type="file" @change="e => firmwareFile = (e.target as HTMLInputElement).files?.[0] || null" class="form-input mb-2" :disabled="!!loadingMsg" />
             <div class="action-footer">
@@ -219,4 +236,23 @@ const updateFirmware = async () => {
 .btn-danger:hover:not(:disabled) { background-color: var(--color-danger-hover); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 .loading-msg { padding: 20px; text-align: center; font-weight: bold; margin-bottom: 20px; color: var(--color-primary); background: #eff6ff; border-radius: 8px; border: 1px dashed var(--color-primary); }
+
+/* Estilos para mostrar la version actual del firmware */
+.version-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: var(--color-danger);
+  font-weight: 600;
+}
+.version-tag {
+  background-color: var(--color-bg-white);
+  border: 1px solid #fca5a5;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  color: var(--color-danger-hover);
+}
 </style>

@@ -542,7 +542,9 @@ const testInfluxConnection = async () => {
                 <h4>Grupos de Canales OMA</h4>
                 <div v-for="(omaGroup, idx) in configStore.draftConfig.OMA.OMAs" :key="idx" class="form-group mt-3 pb-3" style="border-bottom: 1px solid var(--color-input-border);">
                   <div class="flex-between">
-                    <label class="form-label mb-0">Sub-Grupo: "{{ omaGroup.Nombre }}"</label>
+                    <label class="form-label mb-0">
+                      Sub-Grupo: <input v-model="omaGroup.Nombre" type="text" class="form-input-sm" style="display:inline-block; width:auto; margin-left: 8px;" />
+                    </label>
                     <button @click="configStore.draftConfig!.OMA.OMAs.splice(idx, 1)" class="btn-icon text-danger">✕</button>
                   </div>
                   
