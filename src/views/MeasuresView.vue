@@ -302,6 +302,11 @@ const guardarFormulario = async () => {
   };
   const periodicidad = formData.value.Programacion.Periodicidad;
 
+  if (periodicidad !== 'Unico' && periodicidad !== 'Continuo' && intervalosUI.value.length === 0) {
+    alert(`Error: La periodicidad seleccionada ("${periodicidad}") requiere definir al menos un intervalo de ejecución.`);
+    return; // Bloquea el guardado y mantiene el panel abierto para que el usuario lo corrija
+  }
+
   if (limitMap[periodicidad]) {
     const maxLimit = limitMap[periodicidad];
     for (const intv of intervalosUI.value) {
