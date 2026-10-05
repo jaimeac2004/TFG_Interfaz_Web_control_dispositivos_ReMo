@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '@/api/axios'
-import type { SensorDetectado, EstadoSensor, SensorTarjetaUI } from '@/types/remo'
+import type { SensorDetectado, EstadoSensor, SensorTarjetaUI, HardwareStatus } from '@/types/remo'
 
 interface User {
   Usuario: string;
@@ -13,6 +13,7 @@ interface AuthState {
   loading: boolean
   //Nuevos parámetros de la página, los sensores y sus estados
   sensoresUI: SensorTarjetaUI[]
+  hardwareStatus: HardwareStatus | null
   loadingDashboard: boolean
   errorDashboard: string
 }
@@ -23,6 +24,7 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: false,
     loading: false,
     sensoresUI: [],
+    hardwareStatus: null,
     loadingDashboard: false,
     errorDashboard: ''
   }),
@@ -118,9 +120,11 @@ export const useAuthStore = defineStore('auth', {
         ])*/
 
         //Version despues de annadir a Status la seccion Gestor.Nodos
-        const res = await api.get<any>('/remo/Status/?Seccion=Gestor&Key=Nodos', { withCredentials: true })
-        
-
+        const [resNodos, resHardware] = await Promise.all([
+          api.get<any>('/remo/Status/?Seccion=Gestor&Key=Nodos', { withCredentials: true }),
+          api.get<HardwareStatus>('/remo/Status/?Seccion=Gestor&Key=Hardware', { withCredentials: true }).catch(() => null) 
+          // Usamos .catch() para que si falla el hardware, no se rompa la tabla de sensores
+        ])
         // const safeParse = (data: any) => {
         //   if (typeof data === 'string') {
         //     if (data.trim() === '') return [] // String vacío -> Array vacío
@@ -134,7 +138,8 @@ export const useAuthStore = defineStore('auth', {
         //   return data || []
         // }
 
-        const nodos = res.data
+        const nodos = resNodos.data
+        this.hardwareStatus = resHardware?.data || null
 
         // Realizamos la fusión de los datos usando la posición
         if (Array.isArray(nodos) && nodos.length > 0) {

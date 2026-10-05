@@ -54,6 +54,30 @@ const formatearNombreCanales = (sensor: any) => {
 
 <template>
   <div class="dashboard-section">
+
+    <div v-if="auth.hardwareStatus" class="hardware-stats mb-4">
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Uso de CPU</span>
+          <span class="stat-value">{{ auth.hardwareStatus.CPU }}%</span>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Memoria RAM (Libre / Total)</span>
+          <span class="stat-value">{{ auth.hardwareStatus.Memoria.Free }} / {{ auth.hardwareStatus.Memoria.Total }} kB</span>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Disco de Almacenamiento</span>
+          <span class="stat-value">{{ auth.hardwareStatus.Disco.Free }} / {{ auth.hardwareStatus.Disco.Total }} MB</span>
+        </div>
+      </div>
+    </div>
+
     <h2>Estado del Hardware</h2>
 
     <div v-if="auth.loadingDashboard" class="status-msg loading-msg">
@@ -286,4 +310,46 @@ const formatearNombreCanales = (sensor: any) => {
 .status-warning { background-color: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
 .status-info { background-color: #3b82f6; box-shadow: 0 0 4px #3b82f6; }
 .status-default { background-color: #9ca3af; }
+
+/* ESTILOS DEL PANEL DE HARDWARE */
+.hardware-stats {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 25px;
+}
+
+.stat-card {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
 </style>

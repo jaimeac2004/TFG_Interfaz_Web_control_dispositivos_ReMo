@@ -213,6 +213,30 @@ const formatearNombreCanales = (sensor: any) => {
 
 <template>
   <div class="dashboard-section">
+
+    <div v-if="auth.hardwareStatus" class="hardware-stats mb-4">
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Uso de CPU</span>
+          <span class="stat-value">{{ auth.hardwareStatus.CPU }}%</span>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Memoria RAM (Libre / Total)</span>
+          <span class="stat-value">{{ auth.hardwareStatus.Memoria.Free }} / {{ auth.hardwareStatus.Memoria.Total }} kB</span>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-info">
+          <span class="stat-label">Disco de Almacenamiento</span>
+          <span class="stat-value">{{ auth.hardwareStatus.Disco.Free }} / {{ auth.hardwareStatus.Disco.Total }} MB</span>
+        </div>
+      </div>
+    </div>
+
     <h2>Estado del Hardware</h2>
 
     <div v-if="auth.loadingDashboard" class="status-msg loading-msg">
@@ -445,6 +469,48 @@ const formatearNombreCanales = (sensor: any) => {
 .status-warning { background-color: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
 .status-info { background-color: #3b82f6; box-shadow: 0 0 4px #3b82f6; }
 .status-default { background-color: #9ca3af; }
+
+/* ESTILOS DEL PANEL DE HARDWARE */
+.hardware-stats {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 25px;
+}
+
+.stat-card {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.mb-4 {
+  margin-bottom: 1rem;
+}
 </style>
 components\Logo.vue:
 <template>
@@ -601,6 +667,45 @@ const formatFecha = (isoString?: string) => {
 .delete { color: var(--color-danger, #dc2626); }
 .delete:hover { background-color: var(--color-bg-main, #fef2f2); }
 </style>
+components\TooltipIcon.vue:
+<script setup lang="ts">
+defineProps<{ texto?: string }>()
+</script>
+
+<template>
+  <!-- Solo se renderiza si se le pasa un texto -->
+  <span v-if="texto" class="tooltip-container" :title="texto">
+    <span class="help-icon">?</span>
+  </span>
+</template>
+
+<style scoped>
+.tooltip-container {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.help-icon {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color-input-border);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: help;
+  margin-left: 6px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.help-icon:hover {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+</style>
 router\index.ts:
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
@@ -662,7 +767,7 @@ export default router
 stores\authStore.ts:
 import { defineStore } from 'pinia'
 import { api } from '@/api/axios'
-import type { SensorDetectado, EstadoSensor, SensorTarjetaUI } from '@/types/remo'
+import type { SensorDetectado, EstadoSensor, SensorTarjetaUI, HardwareStatus } from '@/types/remo'
 
 interface User {
   Usuario: string;
@@ -675,6 +780,7 @@ interface AuthState {
   loading: boolean
   //Nuevos parÃ¡metros de la pÃ¡gina, los sensores y sus estados
   sensoresUI: SensorTarjetaUI[]
+  hardwareStatus: HardwareStatus | null
   loadingDashboard: boolean
   errorDashboard: string
 }
@@ -685,6 +791,7 @@ export const useAuthStore = defineStore('auth', {
     isAuthenticated: false,
     loading: false,
     sensoresUI: [],
+    hardwareStatus: null,
     loadingDashboard: false,
     errorDashboard: ''
   }),
@@ -780,9 +887,11 @@ export const useAuthStore = defineStore('auth', {
         ])*/
 
         //Version despues de annadir a Status la seccion Gestor.Nodos
-        const res = await api.get<any>('/remo/Status/?Seccion=Gestor&Key=Nodos', { withCredentials: true })
-        
-
+        const [resNodos, resHardware] = await Promise.all([
+          api.get<any>('/remo/Status/?Seccion=Gestor&Key=Nodos', { withCredentials: true }),
+          api.get<HardwareStatus>('/remo/Status/?Seccion=Gestor&Key=Hardware', { withCredentials: true }).catch(() => null) 
+          // Usamos .catch() para que si falla el hardware, no se rompa la tabla de sensores
+        ])
         // const safeParse = (data: any) => {
         //   if (typeof data === 'string') {
         //     if (data.trim() === '') return [] // String vacÃ­o -> Array vacÃ­o
@@ -796,7 +905,8 @@ export const useAuthStore = defineStore('auth', {
         //   return data || []
         // }
 
-        const nodos = res.data
+        const nodos = resNodos.data
+        this.hardwareStatus = resHardware?.data || null
 
         // Realizamos la fusiÃ³n de los datos usando la posiciÃ³n
         if (Array.isArray(nodos) && nodos.length > 0) {
@@ -1220,6 +1330,36 @@ export interface SensorTarjetaUI extends SensorDetectado {
   Nombre: string;
   Coordenadas: Coordenadas;
 }
+
+// --- ESTADO DEL HARDWARE ---
+export interface HardwareStatus {
+  CPU: number;
+  Memoria: {
+    Total: number;
+    Free: number;
+  };
+  Disco: {
+    Total: number;
+    Free: number;
+  };
+}
+utils\tooltips.ts:
+export const tooltips = {
+  // Descripciones generales de las pestaÃ±as de procesado
+  procesado: {
+    Data: "Almacenamiento directo de la seÃ±al temporal sin procesar matemÃ¡ticamente.",
+    TA: "Time Analysis: MonitorizaciÃ³n continua de variables de estado (como Temperatura o Humedad) en el dominio del tiempo.",
+    FFT: "Transformada RÃ¡pida de Fourier: Convierte la seÃ±al del dominio del tiempo al dominio de la frecuencia para identificar resonancias.",
+    OMA: "AnÃ¡lisis Modal Operacional: Identifica las propiedades dinÃ¡micas de una estructura (frecuencias, amortiguamiento) en condiciones de operaciÃ³n (algoritmo SSI).",
+    FRF: "FunciÃ³n de Respuesta en Frecuencia: AnÃ¡lisis Modal Experimental (EMA) que relaciona una fuerza de excitaciÃ³n conocida con la respuesta estructural."
+  },
+  // Ejemplos de parÃ¡metros especÃ­ficos para que veas cÃ³mo se escala
+  parametros: {
+    resF: "ResoluciÃ³n frecuencial. Define el espaciado entre lÃ­neas del espectro en Hercios (Hz).",
+    incF: "Incremento frecuencial o solapamiento entre espectros consecutivos.",
+    ventana: "FunciÃ³n matemÃ¡tica aplicada al bloque de datos para mitigar el efecto de fuga espectral (Leakage)."
+  }
+};
 views\AboutView.vue:
 <template>
   <div class="about">
@@ -1244,6 +1384,9 @@ import { useRouter } from 'vue-router';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 import axios from 'axios';
+
+import TooltipIcon from '@/components/TooltipIcon.vue';
+import { tooltips } from '@/utils/tooltips';
 
 const auth = useAuthStore();
 const configStore = useConfigStore();
@@ -1683,7 +1826,9 @@ const testInfluxConnection = async () => {
 
             <div class="proc-content">
               <div class="flex-between" style="border-bottom: 2px solid var(--color-border); margin-bottom: 20px;">
-                <h2 class="section-title" style="border-bottom: none; margin-bottom: 0; padding-bottom: 8px;">ConfiguraciÃ³n: {{ activeProcTab }}</h2>
+                <h2 class="section-title" style="border-bottom: none; margin-bottom: 0; padding-bottom: 8px;">ConfiguraciÃ³n: {{ activeProcTab }}
+                  <TooltipIcon :texto="tooltips.procesado[activeProcTab]" />
+                </h2>
                 <button v-if="['FFT', 'OMA', 'FRF'].includes(activeProcTab)" 
                         @click="configStore.resetProcesado(activeProcTab as any)" 
                         class="btn-text text-danger mb-2" 
@@ -1749,10 +1894,10 @@ const testInfluxConnection = async () => {
               <div v-if="activeProcTab === 'FFT' && configStore.draftConfig.FFT.Config" class="config-box">
                 <h4>Detalles FFT</h4>
                 <div class="grid-3-cols mt-2">
-                  <div class="form-group"><label class="form-label">Res F</label><input v-model.number="configStore.draftConfig.FFT.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="configStore.draftConfig.FFT.Config['Inc F']" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Res F <TooltipIcon :texto="tooltips.parametros.resF" /></label><input v-model.number="configStore.draftConfig.FFT.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Inc F <TooltipIcon :texto="tooltips.parametros.incF" /></label><input v-model.number="configStore.draftConfig.FFT.Config['Inc F']" type="number" class="form-input" /></div>
                   <div class="form-group">
-                    <label class="form-label">Ventana</label>
+                    <label class="form-label">Ventana <TooltipIcon :texto="tooltips.parametros.ventana" /></label>
                     <select v-model="configStore.draftConfig.FFT.Config.Ventana" class="form-select">
                       <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                     </select>

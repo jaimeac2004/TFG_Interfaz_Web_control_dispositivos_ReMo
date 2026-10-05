@@ -37,3 +37,16 @@ export interface SensorTarjetaUI extends SensorDetectado {
   Nombre: string;
   Coordenadas: Coordenadas;
 }
+
+// --- ESTADO DEL HARDWARE ---
+export interface HardwareStatus {
+  CPU: number;
+  Memoria: {
+    Total: number;
+    Free: number;
+  };
+  Disco: {
+    Total: number;
+    Free: number;
+  };
+}
