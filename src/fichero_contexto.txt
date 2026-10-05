@@ -2591,12 +2591,14 @@ const handleEliminar = async (medida: MedidaItem) => {
           <h1 class="page-title">Programador de Medidas</h1>
           <p class="page-subtitle">GestiÃ³n de adquisiciones autÃ³nomas (Gestor.Medidas)</p>
         </div>
-        <button @click="openLanzarPanel" class="btn-secondary" :disabled="measuresStore.loading">
-          Lanzar Medida
-        </button>
-        <button @click="openCreatePanel" class="btn-primary" :disabled="measuresStore.loading">
-          Nueva Medida
-        </button>
+        <div class="btn-group">
+          <button @click="openLanzarPanel" class="btn-secondary" style="flex: none;" :disabled="measuresStore.loading">
+            Lanzar Medida
+          </button>
+          <button @click="openCreatePanel" class="btn-primary" :disabled="measuresStore.loading">
+            Nueva Medida
+          </button>
+        </div>
       </header>
 
       <div class="cards-container">
@@ -3181,6 +3183,11 @@ const handleEliminar = async (medida: MedidaItem) => {
   border: 1px solid var(--color-border);
 }
 
+
+.btn-group {
+  display: inline-flex;
+}
+
 .btn-primary {
   display: flex;
   align-items: center;
@@ -3642,7 +3649,7 @@ const fetchVersion = async () => {
   try {
     const res = await api.get('/remo/Version', { withCredentials: true });
     // Soporta tanto que el JSON devuelva { "Version": "1.0" } como que devuelva el string/nÃºmero directo
-    currentVersion.value = res.data?.Version || res.data?.version || res.data || 'Desconocida';
+    currentVersion.value = res.data?.['Version string'] || res.data?.Version || (typeof res.data === 'string' ? res.data : 'Desconocida');
   } catch (error) {
     console.error("Error obteniendo la versiÃ³n del firmware:", error);
     currentVersion.value = 'Desconocida';

@@ -5,6 +5,9 @@ import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 import axios from 'axios';
 
+import TooltipIcon from '@/components/TooltipIcon.vue';
+import { tooltips } from '@/utils/tooltips';
+
 const auth = useAuthStore();
 const configStore = useConfigStore();
 const router = useRouter();
@@ -443,7 +446,9 @@ const testInfluxConnection = async () => {
 
             <div class="proc-content">
               <div class="flex-between" style="border-bottom: 2px solid var(--color-border); margin-bottom: 20px;">
-                <h2 class="section-title" style="border-bottom: none; margin-bottom: 0; padding-bottom: 8px;">Configuración: {{ activeProcTab }}</h2>
+                <h2 class="section-title" style="border-bottom: none; margin-bottom: 0; padding-bottom: 8px;">Configuración: {{ activeProcTab }}
+                  <TooltipIcon :texto="tooltips.procesado[activeProcTab]" />
+                </h2>
                 <button v-if="['FFT', 'OMA', 'FRF'].includes(activeProcTab)" 
                         @click="configStore.resetProcesado(activeProcTab as any)" 
                         class="btn-text text-danger mb-2" 
@@ -509,10 +514,10 @@ const testInfluxConnection = async () => {
               <div v-if="activeProcTab === 'FFT' && configStore.draftConfig.FFT.Config" class="config-box">
                 <h4>Detalles FFT</h4>
                 <div class="grid-3-cols mt-2">
-                  <div class="form-group"><label class="form-label">Res F</label><input v-model.number="configStore.draftConfig.FFT.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
-                  <div class="form-group"><label class="form-label">Inc F</label><input v-model.number="configStore.draftConfig.FFT.Config['Inc F']" type="number" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Res F <TooltipIcon :texto="tooltips.parametros.resF" /></label><input v-model.number="configStore.draftConfig.FFT.Config['Res F']" type="number" step="0.1" class="form-input" /></div>
+                  <div class="form-group"><label class="form-label">Inc F <TooltipIcon :texto="tooltips.parametros.incF" /></label><input v-model.number="configStore.draftConfig.FFT.Config['Inc F']" type="number" class="form-input" /></div>
                   <div class="form-group">
-                    <label class="form-label">Ventana</label>
+                    <label class="form-label">Ventana <TooltipIcon :texto="tooltips.parametros.ventana" /></label>
                     <select v-model="configStore.draftConfig.FFT.Config.Ventana" class="form-select">
                       <option>Rectangular</option><option>Hanning</option><option>Hamming</option><option>Blackman</option><option>Flat Top</option><option>Triangular</option>
                     </select>
